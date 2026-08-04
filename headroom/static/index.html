@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Headroom — context compression A/B</title>
+<style>
+  :root {
+    --bg:#0d1117; --panel:#161b22; --line:#30363d; --fg:#e6edf3; --dim:#8b949e;
+    --off:#f85149; --on:#3fb950; --bar:#1f6feb; --warn:#d29922;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { padding:20px 24px; border-bottom:1px solid var(--line); }
+  h1 { margin:0; font-size:17px; letter-spacing:-.01em; }
+  .sub { color:var(--dim); font-size:13px; margin-top:4px; }
+  .wrap { padding:24px; max-width:1180px; margin:0 auto; }
+  .stats { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:24px; }
+  .tile { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+          padding:12px 16px; min-width:150px; flex:1; }
+  .tile .k { color:var(--dim); font-size:11px; text-transform:uppercase; letter-spacing:.06em; }
+  .tile .v { font-size:21px; font-weight:600; font-family:var(--mono); margin-top:4px; }
+  select { background:var(--panel); color:var(--fg); border:1px solid var(--line);
+           border-radius:6px; padding:8px 10px; font-size:13px; width:100%; max-width:520px; }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px; }
+  @media (max-width:800px){ .cols{ grid-template-columns:1fr; } }
+  .arm { background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .arm h2 { margin:0; padding:12px 16px; font-size:13px; letter-spacing:.04em;
+            text-transform:uppercase; border-bottom:1px solid var(--line); }
+  .arm.off h2 { color:var(--off); } .arm.on h2 { color:var(--on); }
+  .kv { display:flex; justify-content:space-between; padding:7px 16px; font-size:13px; }
+  .kv:nth-child(even){ background:rgba(255,255,255,.02); }
+  .kv .n { color:var(--dim); } .kv .v { font-family:var(--mono); }
+  .verdict { padding:10px 16px; font-family:var(--mono); font-size:12px;
+             border-top:1px solid var(--line); }
+  .ok { color:var(--on); } .bad { color:var(--off); } .warnc { color:var(--warn); }
+  table { width:100%; border-collapse:collapse; margin-top:8px; font-size:12px; }
+  th,td { text-align:left; padding:5px 16px; font-family:var(--mono); }
+  th { color:var(--dim); font-weight:500; font-size:11px; text-transform:uppercase; }
+  .bar { height:5px; background:var(--bar); border-radius:2px; min-width:1px; }
+  .bar.over { background:var(--off); }
+  .empty { color:var(--dim); padding:40px; text-align:center; }
+  code { font-family:var(--mono); background:rgba(255,255,255,.06); padding:1px 5px;
+         border-radius:4px; font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Headroom</h1>
+  <div class="sub">A coding agent inside a 32,768-token ceiling —
+    the same task run with and without Paritok compression.</div>
+</header>
+
+<div class="wrap">
+  <div class="stats" id="stats"></div>
+  <select id="picker"></select>
+  <div id="body"></div>
+</div>
+
+<script>
+const LIMIT = 32768;
+const $ = (id) => document.getElementById(id);
+const fmt = (n) => n === null || n === undefined ? "—" : Number(n).toLocaleString();
+
+async function j(url) { const r = await fetch(url); return r.json(); }
+
+async function loadStats() {
+  const s = await j("/api/stats");
+  const tiles = s.error
+    ? [["proxy", "offline"]]
+    : [
+        ["requests compressed", fmt(s.total_requests)],
+        ["tokens in", fmt(s.input_tokens_original)],
+        ["tokens after", fmt(s.input_tokens_compressed)],
+        ["tokens saved", fmt(s.tokens_saved)],
+        ["compression ratio", s.compression_ratio ?? "—"],
+        ["est. cost saved", s.estimated_cost_saved_usd ?? "—"],
+      ];
+  $("stats").innerHTML = tiles.map(([k, v]) =>
+    `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+}
+
+function armCard(r) {
+  const on = r.paritok === 1;
+  const peak = r.peak_prompt_tokens || 0;
+  const solved = r.outcome === "solved" && r.tests_passed === 1;
+
+  let verdict;
+  if (r.outcome === "overflow") {
+    verdict = `<span class="bad">✗ context overflow at turn ${r.overflow_at_turn} —
+      ${fmt(r.overflow_tokens)} tokens against a ${fmt(LIMIT)} ceiling</span>`;
+  } else if (solved) {
+    verdict = `<span class="ok">✓ solved — tests pass</span>`;
+  } else if (r.outcome === "solved") {
+    verdict = `<span class="warnc">⚠ claimed solved but tests still fail</span>`;
+  } else {
+    verdict = `<span class="bad">✗ ${r.outcome}</span>`;
+  }
+
+  const rows = [
+    ["turns completed", fmt(r.turns_completed)],
+    ["peak prompt tokens", fmt(peak)],
+    ["total prompt tokens", fmt(r.total_prompt_tokens)],
+    ["patches applied", fmt(r.patches_applied)],
+    ["wall time", r.wall_time_s ? r.wall_time_s + "s" : "—"],
+  ];
+
+  const turns = (r.turns || []).map(t => {
+    const tok = t.actual_prompt_tokens || t.estimated_prompt_tokens || 0;
+    const pct = Math.min(100, (tok / LIMIT) * 100);
+    return `<tr><td>${t.turn}</td><td>${t.tool_name || "—"}</td>
+      <td>${fmt(tok)}</td>
+      <td style="width:34%"><div class="bar ${tok > LIMIT ? "over" : ""}"
+        style="width:${pct}%"></div></td></tr>`;
+  }).join("");
+
+  return `<div class="arm ${on ? "on" : "off"}">
+    <h2>${on ? "Paritok ON" : "Paritok OFF"}</h2>
+    ${rows.map(([n, v]) => `<div class="kv"><span class="n">${n}</span><span class="v">${v}</span></div>`).join("")}
+    <div class="verdict">${verdict}</div>
+    <table><tr><th>turn</th><th>tool</th><th>prompt tok</th><th>vs ceiling</th></tr>${turns}</table>
+  </div>`;
+}
+
+async function loadPair(id) {
+  const d = await j("/api/pair/" + id);
+  const off = d.runs.find(r => r.paritok === 0);
+  const on = d.runs.find(r => r.paritok === 1);
+  let note = "";
+  const st = on && on.paritok_stats;
+  if (st && st.input_tokens_original) {
+    const pct = (100 * st.tokens_saved / st.input_tokens_original).toFixed(1);
+    note = `<p class="sub" style="margin-top:16px">Paritok compressed
+      <code>${fmt(st.input_tokens_original)}</code> →
+      <code>${fmt(st.input_tokens_compressed)}</code> input tokens across
+      ${st.total_requests} requests — <strong>${pct}% saved</strong>.</p>`;
+  }
+  $("body").innerHTML = `<div class="cols">
+      ${off ? armCard(off) : "<div class='empty'>no off arm</div>"}
+      ${on ? armCard(on) : "<div class='empty'>no on arm</div>"}
+    </div>${note}`;
+}
+
+async function boot() {
+  await loadStats();
+  setInterval(loadStats, 5000);
+  const pairs = await j("/api/pairs");
+  if (!pairs.length) {
+    $("body").innerHTML = `<div class="empty">No runs yet. Run
+      <code>python -m headroom ab tasks/task02_pipeline_triage</code></div>`;
+    return;
+  }
+  $("picker").innerHTML = pairs.map(p =>
+    `<option value="${p.pair_id}">${p.task} — ${new Date(p.started * 1000).toLocaleString()}</option>`).join("");
+  $("picker").onchange = (e) => loadPair(e.target.value);
+  loadPair(pairs[0].pair_id);
+}
+boot();
+</script>
+</body>
+</html>

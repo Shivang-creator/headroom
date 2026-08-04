@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+.keys.env
+*.db
+compress_trace.jsonl
+runs/
+.DS_Store

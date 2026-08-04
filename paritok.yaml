@@ -1,0 +1,54 @@
+# Backend switch — the one setting most people touch.
+#   false → self-host the open Paritok model locally (via Ollama).
+#   true  → use the Paritok GPU server (needs an API key from https://paritok.com).
+use_gpu_server: true
+
+# Paritok GPU server — only used when use_gpu_server: true.
+gpu_server:
+  base_url: https://www.paritok.com/api   # POST /compress, GET /test
+  model: paritok-4b-v1
+  api_key: ""            # paste your key, or set env PARITOK_API_KEY
+  timeout: 90.0
+
+# Self-hosted local model — only used when use_gpu_server: false.
+local_model:
+  base_url: http://localhost:11434/v1
+  # ollama pull paritok/paritok-4b-v1 && ollama cp paritok/paritok-4b-v1 paritok-4b-v1
+  model: paritok-4b-v1
+  temperature: 0
+  timeout: 300.0
+
+compression:
+  min_tokens: 512          # skip compression below this
+  max_tokens: 50000        # skip compression above this
+  refusal_threshold: 0.05  # must save at least 5% or keep the original
+
+history:
+  enabled: true
+  keep_recent_turns: 4     # keep last N turns intact
+  context_threshold: 0.8   # compress old turns when >80% of the window is used
+  context_window: 32768   # MUST match the real upstream ceiling (Featherless plan cap)
+
+tool_discovery:
+  strategy: passthrough      # "embedding" (default) | "relevance" | "passthrough"
+  top_k: 5                 # (relevance) keep top-K tool schemas, stub the rest
+  # embedding strategy (semantic select + session freeze + adaptive apply):
+  k_max: 8                 # max tools kept in full schema
+  adaptive: true           # coding tasks drop unselected MCP; MCP tasks stub them
+  mcp_signal_threshold: 1.0
+
+# Per-compression debug trace. Turn on to log every original→compressed pair.
+trace:
+  enabled: true
+  path: compress_trace.jsonl
+
+# Codex CLI — Codex can't read OPENAI_BASE_URL, so flip this on and paritok will
+# write ~/.codex/config.toml for you (backing up any existing one). Then just run
+# `codex`. Everything lives here — no TOML to hand-edit.
+codex:
+  enabled: false           # true → auto-configure Codex to route through this proxy
+  model: gpt-5             # any model your key can call
+  api_key: ""              # your OpenAI key (embedded into the generated config.toml);
+                           # leave empty to have Codex read env OPENAI_API_KEY instead
+
+shadow_storage: memory     # "memory" | "redis" (redis persists [REF] across restarts; needs paritok[redis])

@@ -1,0 +1,66 @@
+[
+  {
+    "model": "zai-org/GLM-4.7-Flash",
+    "ok": 2,
+    "tool_calls": 2,
+    "p50_s": 50.3,
+    "errors": [
+      "This model is busy, please try again later."
+    ]
+  },
+  {
+    "model": "zai-org/GLM-4.7",
+    "ok": 3,
+    "tool_calls": 3,
+    "p50_s": 6.5,
+    "errors": []
+  },
+  {
+    "model": "zai-org/GLM-5.1",
+    "ok": 3,
+    "tool_calls": 3,
+    "p50_s": 2.7,
+    "errors": []
+  },
+  {
+    "model": "deepseek-ai/DeepSeek-V3.2",
+    "ok": 3,
+    "tool_calls": 2,
+    "p50_s": 6.7,
+    "errors": []
+  },
+  {
+    "model": "deepseek-ai/DeepSeek-V3.1-Terminus",
+    "ok": 3,
+    "tool_calls": 3,
+    "p50_s": 7.9,
+    "errors": []
+  },
+  {
+    "model": "moonshotai/Kimi-K2.7-Code",
+    "ok": 3,
+    "tool_calls": 3,
+    "p50_s": 3.7,
+    "errors": []
+  },
+  {
+    "model": "Qwen/Qwen3-VL-30B-A3B-Instruct",
+    "ok": 0,
+    "tool_calls": 0,
+    "p50_s": null,
+    "errors": [
+      "No successful response received from completion service",
+      "No successful response received from completion service"
+    ]
+  },
+  {
+    "model": "meta-llama/Llama-3.3-70B-Instruct",
+    "ok": 0,
+    "tool_calls": 0,
+    "p50_s": null,
+    "errors": [
+      "This model is gated. Connect HuggingFace for this organizati",
+      "This model is gated. Connect HuggingFace for this organizati"
+    ]
+  }
+]

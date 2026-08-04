@@ -1,0 +1,82 @@
+[
+  {
+    "target": 1000,
+    "actual": 1032,
+    "out_tokens": 1032,
+    "ratio": 1.0,
+    "empty": false,
+    "elapsed": 27.2
+  },
+  {
+    "target": 2000,
+    "actual": 2064,
+    "out_tokens": 68,
+    "ratio": 0.0329,
+    "empty": false,
+    "elapsed": 2.9
+  },
+  {
+    "target": 4000,
+    "actual": 4001,
+    "out_tokens": 74,
+    "ratio": 0.0185,
+    "empty": false,
+    "elapsed": 3.1
+  },
+  {
+    "target": 6000,
+    "actual": 6006,
+    "out_tokens": 6006,
+    "ratio": 1.0,
+    "empty": false,
+    "elapsed": 2.4
+  },
+  {
+    "target": 8000,
+    "actual": 8008,
+    "out_tokens": 8008,
+    "ratio": 1.0,
+    "empty": false,
+    "elapsed": 1.1
+  },
+  {
+    "target": 12000,
+    "actual": 12018,
+    "out_tokens": 12018,
+    "ratio": 1.0,
+    "empty": false,
+    "elapsed": 1.2
+  },
+  {
+    "target": 16000,
+    "actual": 16022,
+    "out_tokens": 16022,
+    "ratio": 1.0,
+    "empty": false,
+    "elapsed": 1.4
+  },
+  {
+    "target": 24000,
+    "actual": 24045,
+    "out_tokens": 24045,
+    "ratio": 1.0,
+    "empty": false,
+    "elapsed": 1.4
+  },
+  {
+    "target": 32000,
+    "actual": 32056,
+    "out_tokens": 32056,
+    "ratio": 1.0,
+    "empty": false,
+    "elapsed": 1.5
+  },
+  {
+    "target": 40000,
+    "actual": 40055,
+    "out_tokens": 40055,
+    "ratio": 1.0,
+    "empty": false,
+    "elapsed": 1.8
+  }
+]
