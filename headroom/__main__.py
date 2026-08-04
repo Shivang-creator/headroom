@@ -65,8 +65,14 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("stats", help="print the proxy's live compression totals")
     sub.add_parser("tasks", help="list the seeded tasks")
+    sub.add_parser("export", help="refresh the README results table and examples/")
 
     args = ap.parse_args(argv)
+
+    if args.cmd == "export":
+        from .export import main as export_main
+        export_main()
+        return
 
     if args.cmd == "stats":
         st = proxy_stats()

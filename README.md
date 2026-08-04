@@ -3,54 +3,86 @@
 
 # Headroom
 
-**Run a real coding agent on a cheap, flat-rate model whose context window is far too small for it.**
+**A coding agent inside a 32,768-token ceiling, and the harness that measures
+what context compression is actually worth.**
 
 Built with [Paritok](https://github.com/Paritok-official/paritok-4b-v1).
 
 ---
 
-## The problem
+## The setting
 
-Flat-rate inference providers are the cheapest way to run an agent. Featherless
-is $25/month for unlimited tokens across 21,000+ open models. The catch is the
-context ceiling: on that plan, every model is capped at **32,768 tokens** — even
-`GLM-5.1`, whose *native* context is 202,752.
-
-A real coding agent blows straight through 32K. It reads files, runs tests,
-reads more files, and every one of those results stays in the conversation. Ours
-crosses 30,000 tokens around turn 15 of a three-bug triage task. After that,
-every request is rejected:
+Flat-rate inference is the cheapest way to run an agent. Featherless is $25/month
+for unlimited tokens across 21,000+ open models. The catch is the context
+ceiling: on that plan every model is capped at **32,768 tokens** — even
+`GLM-5.1`, whose *native* context is 202,752. Exceed it and the request is
+refused outright:
 
 ```
 Maximum context length for model 'zai-org/GLM-5.1' allowed on your plan is
-32768 tokens. Your prompt has 35627 tokens, which exceeds the maximum context
-length limit by 2859 tokens.
+32768 tokens. Your prompt has 38435 tokens, which exceeds the maximum context
+length limit by 5667 tokens.
 ```
 
-The run doesn't degrade. It stops.
+Headroom is a coding agent that fixes real bugs in real repositories, plus an A/B
+harness that runs each task twice — once straight to Featherless, once through
+the [Paritok](https://github.com/Paritok-official/paritok-4b-v1) compression
+proxy — and reports what changed.
 
-## What Headroom does
+## What we actually found
 
-Headroom is a coding agent that fixes real bugs in real repositories, plus the
-measurement harness that proves what compression is worth. Every LLM request
-goes through [Paritok](https://github.com/Paritok-official/paritok-4b-v1), which
-compresses the accumulated context in flight before it reaches the model.
+We set out to show an agent that dies without compression and survives with it.
+**That is not what the data says, and we are reporting what the data says.**
 
-**The claim is not that this is cheaper. It's that the agent runs at all.**
+**1. Compression cuts input tokens by 48–82% with identical outcomes.** Across
+three seeded tasks, both arms solved every task, applied the same patches, and
+ended with the tests green. Compression cost about one extra turn and some wall
+time. That is a real, reproducible win.
 
-Compression turns a 32,768-token ceiling into an effective working window
-several times larger, which moves long-horizon agentic work onto a tier of
-infrastructure that previously could not host it.
+**2. A competent agent doesn't overflow 32K as easily as we assumed.** It greps
+instead of reading exhaustively and pipes verbose output through `head`. Breadth
+of codebase alone did not overflow the window — our 217KB, 20-module, three-bug
+task peaked at 12,116 tokens. Context engineering the agent already does for
+itself is doing a lot of the work people credit to compression.
+
+**3. The one case that does overflow is the case Paritok can't help with.** A
+single tool result larger than the window — 306 failing parameterised tests,
+~82,000 tokens from one `pytest` call — kills the run. But the hosted compressor
+**silently returns input verbatim above ~6,000 tokens**, so it declines to
+compress exactly the blocks that cause the problem. Measured, reproducible, and
+detailed in [§4 of FINDINGS](docs/FINDINGS.md). Headroom works around it by
+paginating oversized tool output into ~3,100-token pages that sit inside the band
+where compression actually works — which turns that task from a hard failure into
+a solved one.
+
+So the honest summary: **Paritok is a substantial and reliable cost win on
+accumulated multi-turn context, and today it has a size ceiling that stops it
+being a capability unlock.** The workaround is cheap and it's in this repo.
 
 ## Measured results
 
-Every number below is produced by `python -m headroom ab <task>`, which runs the
-identical task twice — once straight to Featherless, once through the Paritok
-proxy — against a pristine copy of the repo each time. The agent is not told
-which arm it is in.
+Produced by `python -m headroom ab <task>`, against a pristine copy of the repo
+per arm. The agent is never told which arm it is in.
 
 <!-- RESULTS:START -->
-_Populated by `python -m headroom export` after the runs complete._
+
+| Task | Arm | Outcome | Turns | Peak prompt tokens | Total input tokens | Tests |
+|---|---|---|---:|---:|---:|:--:|
+| `task01_report_mean` | Paritok off | ✓ solved | 9 | 7,013 | 29,823 | ✅ |
+| `task01_report_mean` | Paritok **on** | ✓ solved | 10 | 2,100 | 14,589 | ✅ |
+| `task02_pipeline_triage` | Paritok off | ✓ solved | 15 | 12,116 | 91,281 | ✅ |
+| `task02_pipeline_triage` | Paritok **on** | ✓ solved | 16 | 5,146 | 37,308 | ✅ |
+| `task03_verbose_suite` | Paritok off | ✓ solved | 11 | 7,184 | 38,025 | ✅ |
+| `task03_verbose_suite` | Paritok **on** | ✓ solved | 11 | 4,833 | 23,946 | ✅ |
+| `task03_verbose_suite` | Paritok off | ✗ overflow at turn 2 | 2 | 38,442 | 39,230 | ❌ |
+| `task03_verbose_suite` | Paritok **on** | ✗ overflow at turn 2 | 2 | 38,435 | 39,223 | ❌ |
+| `task03_verbose_suite` | Paritok off | ✓ solved | 9 | 8,716 | 48,708 | ✅ |
+| `task03_verbose_suite` | Paritok **on** | ✓ solved | 10 | 4,388 | 35,093 | ✅ |
+
+Across the 4 runs that completed, Paritok cut input tokens by **47.8–81.6%** (mean 66.2%), with both arms reaching the same outcome — same patches, tests green — on every task.
+
+The `overflow at turn 2` rows are the unpaginated version of task 3, kept deliberately: a single 82,000-token tool result kills **both** arms, because the compressor passes through blocks above ~6,000 tokens. Pagination is what fixes it — see [docs/FINDINGS.md §4](docs/FINDINGS.md).
+
 <!-- RESULTS:END -->
 
 ## How it works
@@ -74,7 +106,7 @@ compressed, which is what keeps the comparison honest.
 | Dashboard | [`headroom/server.py`](headroom/server.py) | Side-by-side comparison + live `/stats` |
 | Tasks | [`tasks/`](tasks/) | Seeded bug-fix repos judges can reproduce |
 
-## Three things we learned the hard way
+## Four things we learned the hard way
 
 These cost real debugging time and none of them are in Paritok's docs. Written
 up in full in [`docs/FINDINGS.md`](docs/FINDINGS.md), and filed upstream.
@@ -98,6 +130,15 @@ Paritok's compressor is *query-conditioned*: it compresses each block relative t
 the latest user turn. Ask something unrelated to the context and it correctly
 returns nothing for every block. But a genuine GPU failure also returns nothing,
 and both become a `[REF:id]` stub. There's no signal to tell them apart.
+
+**4. Blocks above ~6,000 tokens come back verbatim, silently.** Reproducible with
+[`tools/probe_block_size.py`](tools/probe_block_size.py) — identical across two
+runs. A 4,001-token block compresses to 74 tokens (0.019). A 6,006-token block
+returns unchanged, in 2.4 seconds. So does 40,055. Meanwhile
+`compression.max_tokens` defaults to **50,000**, an order of magnitude above
+where compression actually stops working, and the failure surfaces downstream as
+`below_refusal_threshold` — which reads like a judgement about content rather
+than a size cutoff. This is why we paginate.
 
 ## Setup
 

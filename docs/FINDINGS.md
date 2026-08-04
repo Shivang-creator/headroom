@@ -117,7 +117,74 @@ small change that turns an unexplainable behaviour into an observable one.
 
 ---
 
-## 4. Smaller things worth fixing
+## 4. The hosted compressor silently passes through blocks above ~6,000 tokens
+
+**This is the most consequential bug we found, and it is fully reproducible:
+[`tools/probe_block_size.py`](../tools/probe_block_size.py).**
+
+We built a task whose failing test suite emits ~82,000 tokens from a single
+`pytest` call — the best possible case for a compressor, since the output is 306
+near-identical parameterised failures. Paritok skipped it:
+
+```json
+{"skipped": true, "reason": "below_refusal_threshold", "original_tokens": 37620}
+```
+
+"Below refusal threshold" means compression saved less than
+`compression.refusal_threshold` (5%), so the original was kept. But highly
+repetitive text failing to compress at all is not a content problem. Probing
+`/api/compress` directly with the same shape of content at increasing sizes,
+**identical results across two runs**:
+
+| Input tokens | Output tokens | Ratio | Latency |
+|---:|---:|---:|---:|
+| 1,032 | 1,032 | 1.00 | 26–27 s |
+| **2,064** | **68** | **0.033** | 2.9 s |
+| **4,001** | **74** | **0.019** | 3.1 s |
+| 6,006 | 6,006 | 1.00 | 2.4 s |
+| 8,008 | 8,008 | 1.00 | 1.1 s |
+| 12,018 | 12,018 | 1.00 | 1.2 s |
+| 16,022 | 16,022 | 1.00 | 1.4 s |
+| 24,045 | 24,045 | 1.00 | 1.4 s |
+| 32,056 | 32,056 | 1.00 | 1.5 s |
+| 40,055 | 40,055 | 1.00 | 1.8 s |
+
+Inside a narrow band — roughly 2,000–4,000 tokens — compression is excellent
+(50× reduction). Above about 6,000 tokens the endpoint **returns the input
+verbatim**, in 1.1–2.4 seconds. That is far too fast for 4B inference over
+20,000+ tokens, which suggests a size guard returning early rather than a model
+producing a poor result.
+
+Three things make this hard to notice:
+
+1. It returns HTTP 200 with a plausible-looking body.
+2. `compression.max_tokens` defaults to **50,000** — an order of magnitude above
+   where compression actually stops working — so users will configure well past
+   the real limit and see no error.
+3. Downstream it surfaces as `below_refusal_threshold`, which reads like a
+   considered decision about content rather than a size cutoff.
+
+The 1,032-token row is separately odd: also uncompressed, but taking 26–27 s in
+both runs, versus 1–3 s everywhere else.
+
+**Why it matters:** the single biggest blocks in an agent's context — a full test
+run, a long build log, a large file read — are exactly the ones that blow the
+window, and exactly the ones this silently declines to compress.
+
+**Suggestion:** (a) document the working range; (b) default `max_tokens` to it
+rather than 50,000; (c) return `{"skipped": true, "reason": "input_too_large"}`
+instead of echoing the input, so callers can chunk and retry.
+
+**Workaround, which Headroom implements:** paginate oversized tool results into
+~3,100-token pages before they enter the conversation
+([`headroom/tools.py`](../headroom/tools.py), `PAGE_CHARS`). One 82,000-token
+block is uncompressible; twenty-seven 3,100-token pages sit inside the working
+band. This is a reasonable thing for an agent to do anyway, and it converts the
+worst case into the best one.
+
+---
+
+## 5. Smaller things worth fixing
 
 **`/stats` counts requests it didn't compress.** After a request with no
 compressible blocks: `{"total_requests": 1, "input_tokens_original": 0,

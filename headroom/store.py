@@ -109,10 +109,13 @@ class Store:
 
     # -- reads used by the dashboard and the exporter ---------------------
     def pairs(self) -> list[dict]:
+        """Only complete pairs. A single-arm `headroom agent` run has nothing to
+        compare against and renders as a half-empty screen."""
         rows = self.conn.execute(
-            "SELECT pair_id, task, MIN(started_at) AS started FROM runs GROUP BY pair_id ORDER BY started DESC"
+            "SELECT pair_id, task, MIN(started_at) AS started, COUNT(*) AS n "
+            "FROM runs GROUP BY pair_id HAVING n = 2 ORDER BY started DESC"
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [{k: r[k] for k in ("pair_id", "task", "started")} for r in rows]
 
     def runs_for_pair(self, pair_id: str) -> list[dict]:
         rows = self.conn.execute(

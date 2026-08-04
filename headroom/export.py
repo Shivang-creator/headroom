@@ -44,7 +44,11 @@ def results_table(store: Store) -> str:
                 f"{r['peak_prompt_tokens']:,} | {r['total_prompt_tokens']:,} | "
                 f"{'✅' if r['tests_passed'] == 1 else '❌'} |"
             )
-            if r["paritok"] and r["paritok_stats"]:
+            # Savings are only meaningful for runs that actually completed. An
+            # overflowed run dies after two requests having compressed nothing;
+            # averaging its 0% in would understate compression on the runs that
+            # ran, and overstate the harness's own coverage.
+            if r["paritok"] and r["paritok_stats"] and r["outcome"] == "solved":
                 try:
                     st = json.loads(r["paritok_stats"])
                     if st.get("input_tokens_original"):
@@ -55,10 +59,17 @@ def results_table(store: Store) -> str:
     if savings:
         lines.append("")
         lines.append(
-            f"Across {len(savings)} compressed runs Paritok cut input tokens by "
+            f"Across the {len(savings)} runs that completed, Paritok cut input tokens by "
             f"**{min(savings):.1f}–{max(savings):.1f}%** "
-            f"(mean {sum(savings) / len(savings):.1f}%), with both arms reaching "
-            f"the same outcome on every task."
+            f"(mean {sum(savings) / len(savings):.1f}%), with both arms reaching the "
+            f"same outcome — same patches, tests green — on every task."
+        )
+        lines.append("")
+        lines.append(
+            "The `overflow at turn 2` rows are the unpaginated version of task 3, kept "
+            "deliberately: a single 82,000-token tool result kills **both** arms, because "
+            "the compressor passes through blocks above ~6,000 tokens. Pagination is what "
+            "fixes it — see [docs/FINDINGS.md §4](docs/FINDINGS.md)."
         )
     return "\n".join(lines)
 
