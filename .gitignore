@@ -6,3 +6,6 @@ __pycache__/
 compress_trace.jsonl
 runs/
 .DS_Store
+
+# handoff note, not part of the project
+MORNING.md
