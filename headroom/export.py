@@ -30,12 +30,23 @@ def _outcome_cell(r: dict) -> str:
 ARM_ORDER = {"truncate": 0, "paginate": 1, "paritok": 2}
 
 
+def _peak_sent(store: Store, run_id: int) -> int:
+    """Largest payload handed to the proxy, before compression.
+
+    On the paritok arm this is what the conversation would have cost with no
+    compression. If it exceeds the ceiling on a run that succeeded, compression
+    wasn't a discount — it was the reason the run completed.
+    """
+    return max((t["estimated_prompt_tokens"] or 0 for t in store.turns_for_run(run_id)),
+               default=0)
+
+
 def results_table(store: Store) -> str:
     lines = [
-        "| Task | Strategy | Outcome | Turns | Peak tokens | Total input tokens | Truncated | Tests |",
-        "|---|---|---|---:|---:|---:|---:|:--:|",
+        "| Task | Strategy | Outcome | Turns | Peak billed | Peak sent | Total input | Trunc | Tests |",
+        "|---|---|---|---:|---:|---:|---:|---:|:--:|",
     ]
-    savings, paired = [], []
+    savings, paired, overs = [], [], []
     for pair in reversed(store.pairs()):
         runs = sorted(store.runs_for_pair(pair["pair_id"]),
                       key=lambda r: ARM_ORDER.get(r["strategy"] or "paginate", 9))
@@ -46,12 +57,17 @@ def results_table(store: Store) -> str:
             arm = r["strategy"] or ("paritok" if r["paritok"] else "paginate")
             arm_label = f"**{arm}**" if arm == "paritok" else arm
             trunc = r["truncations"] or 0
+            sent = _peak_sent(store, r["id"])
+            # Mark the case where the uncompressed payload wouldn't have fit.
+            sent_cell = f"**{sent:,}** ⚠" if sent > 32_768 else f"{sent:,}"
             lines.append(
                 f"| `{r['task']}` | {arm_label} | {_outcome_cell(r)} | {r['turns_completed']} | "
-                f"{r['peak_prompt_tokens']:,} | {r['total_prompt_tokens']:,} | "
+                f"{r['peak_prompt_tokens']:,} | {sent_cell} | {r['total_prompt_tokens']:,} | "
                 f"{str(trunc) + '×' if trunc else '—'} | "
                 f"{'✅' if r['tests_passed'] == 1 else '❌'} |"
             )
+            if arm == "paritok" and sent > 32_768 and r["outcome"] == "solved":
+                overs.append((r["task"], sent, r["peak_prompt_tokens"]))
         # paginate vs paritok is the clean attribution: identical agents,
         # identical evidence, only base_url differs.
         pg, pk = by_strategy.get("paginate"), by_strategy.get("paritok")

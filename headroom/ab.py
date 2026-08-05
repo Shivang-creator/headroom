@@ -152,6 +152,17 @@ def format_comparison(pair: dict) -> str:
                 f"{st['total_requests']} requests ({pct:.1f}% saved)."
             )
 
+    # If the uncompressed payload exceeded the ceiling while the run still
+    # succeeded, compression was not a discount — it was the reason it ran.
+    pk = arms.get("paritok")
+    if pk and pk.get("peak_sent_tokens", 0) > 32_768 and pk["outcome"] == "solved":
+        lines.append(
+            f"\n  paritok carried a conversation whose uncompressed payload peaked at "
+            f"{pk['peak_sent_tokens']:,} tokens — above the {32_768:,} ceiling — while "
+            f"never being billed more than {pk['peak_prompt_tokens']:,}. Without "
+            f"compression this run could not have completed."
+        )
+
     # The comparison that matters: same evidence seen, different cost.
     if "paginate" in arms and "paritok" in arms:
         a, b = arms["paginate"]["total_prompt_tokens"], arms["paritok"]["total_prompt_tokens"]

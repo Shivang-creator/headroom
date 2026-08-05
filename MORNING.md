@@ -56,10 +56,14 @@ patches and green tests.
 | task01 total input tokens | 30,648 | 27,142 | **13,225** |
 | task02 total input tokens | 92,518 | 91,167 | **43,808** |
 | task03 total input tokens | 86,739 | 48,901 | **43,054** |
+| task04 total input tokens | 94,251 | 111,971 | **64,320** |
 
-- **Compression at the proxy: 45.3–80.6%** (mean 64.7%)
-- **End to end vs the identical uncompressed arm: 12.0–51.9% fewer input tokens** (mean 38.4%)
-- Peak context cut by 45–70% on every task
+- **12 runs across 4 tasks — every arm solved every task, tests green**
+- **Compression at the proxy: 45.3–80.6%** (mean 67.0%)
+- **End to end vs the identical uncompressed arm: 12.0–51.9% fewer input tokens** (mean 39.4%)
+- On task 4 the compressed arm carried a payload peaking at **26,222 tokens sent
+  against 6,502 billed** — more pages than the uncompressed arm managed, at a
+  fifth of the ceiling
 
 ## Read this before you film
 
@@ -72,10 +76,13 @@ didn't support that, so we don't claim it.** What we found instead:
    tokens for the same evidence and the same fix.
 2. A competent agent **doesn't overflow 32K as easily as assumed** — it greps
    rather than reading everything.
-3. **Truncation isn't even cheap.** On task 3 the truncating arm burned 86,739
-   tokens against paginate's 48,901 — nearly double — *and* lost evidence. A
-   truncated chunk sits in context at full size every subsequent turn; pagination
-   spends its tokens once. That surprised me and it's a genuinely useful result.
+3. **Truncation isn't reliably cheap.** On task 3 it burned 86,739 tokens against
+   paginate's 48,901 — 77% more — *and* lost evidence. On task 4 it came out 16%
+   cheaper, but again only by discarding a tool result. Least predictable option.
+4. **We tried three times to force an overflow and failed.** Task 4 has 462
+   failing cases over 41 pages and a brief telling the agent three times to read
+   every page. It stopped after ~10, reasoned correctly, and fixed the bug.
+   Agents self-limit robustly enough to resist instruction — FINDINGS §7.
 4. The one case that does overflow is the case **Paritok currently can't help
    with** — the hosted compressor silently returns input verbatim above ~6,000
    tokens. Reproducible via `tools/probe_block_size.py`, identical across two
@@ -95,9 +102,9 @@ everything else. The honest story is strong.
 - ✅ `headroom doctor` preflight — catches silent compression failure
 - ✅ **38 tests** over the harness (`pytest tests/ -q`, no network, 0.2s)
 - ✅ FastAPI dashboard, three-arm layout, live `/stats`
-- ✅ Three seeded tasks, regenerable via `tasks/build_tasks.py`
-- ✅ `examples/` — 3 committed transcripts with turn-by-turn token tables
-- ✅ README, RUNME, `docs/FINDINGS.md` (6 findings), `docs/SUBMISSION.md` (rule-by-rule compliance)
+- ✅ Four seeded tasks, regenerable via `tasks/build_tasks.py`
+- ✅ `examples/` — 4 committed transcripts with turn-by-turn token tables
+- ✅ README, RUNME, `docs/FINDINGS.md` (7 findings), `docs/SUBMISSION.md` (rule-by-rule compliance)
 - ✅ Apache 2.0 LICENSE + required Paritok credit + badge
 - ✅ Two reusable probes: `probe_models.py`, `probe_block_size.py`
 - ✅ Devpost draft, video script, feedback issue draft
@@ -109,10 +116,9 @@ everything else. The honest story is strong.
 - ⬜ **Video not recorded** — script in [`docs/VIDEO_SCRIPT.md`](docs/VIDEO_SCRIPT.md), timed to 2:50
 - ⬜ **Social post** — `#BuiltWithParitok`, another $50. Angle: "I set out to
   prove compression saves your agent. The data said something more interesting."
-- ⚠️ **Dashboard never viewed in a browser** — I have no display. All endpoints
-  are verified returning correct data and the HTML/CSS is straightforward, but if
-  it looks wrong on camera, film the CLI instead. `headroom ab` output is
-  arguably the better visual anyway.
+- ✅ **Dashboard verified visually** — rendered via headless Brave and inspected;
+  screenshot at `docs/img/dashboard.png` (also good for the Devpost image
+  gallery). The three-arm turn tables read well on camera.
 
 ## Known rough edges
 

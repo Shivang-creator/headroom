@@ -259,6 +259,11 @@ class Agent:
             "peak_prompt_tokens": self.gov.peak_prompt_tokens,
             "overflow_at_turn": self.gov.overflowed_at_turn,
             "overflow_tokens": self.gov.overflow_tokens,
+            # What the conversation would have cost with no compression, i.e.
+            # the size of the payload we handed the proxy. If this exceeds the
+            # ceiling while the run succeeds, compression is load-bearing rather
+            # than merely economical.
+            "peak_sent_tokens": max((t.estimated_prompt_tokens for t in self.gov.turns), default=0),
             "tests_passed": tests_passed,
             "patches_applied": self.tools.patches_applied,
             "truncations": self.tools.truncations,

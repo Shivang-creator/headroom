@@ -34,37 +34,46 @@ against a pristine copy of the repo each time, and reports what changed.
 We set out to show an agent that dies without compression and survives with it.
 **That is not what the data says, and we are reporting what the data says.**
 
-**1. Compression cuts input tokens roughly in half, with identical outcomes.**
-Against the `paginate` arm — same agent, same evidence, differing only by
-`base_url` — the compressed arm used **12–52% fewer input tokens** (mean 38%),
-and **45–81% less** measured at the proxy itself. All three strategies solved all
-three tasks, applied the same patches, and ended with the tests green.
-Compression cost a few extra turns.
+**1. Compression cuts input tokens by a third to a half, with identical
+outcomes.** Against the `paginate` arm — same agent, same evidence, differing
+only by `base_url` — the compressed arm used **12–52% fewer input tokens**
+(mean 39%), and **45–81% less** measured at the proxy itself. Across 12 runs on
+4 tasks, **every arm solved every task**, applied the same patches, and ended
+with the tests green. Compression cost a few extra turns and some wall time.
 
-**2. A competent agent doesn't overflow 32K as easily as we assumed.** It greps
-instead of reading exhaustively and pipes verbose output through `head`. Breadth
-of codebase alone did not overflow the window — our 217KB, 20-module, three-bug
-task peaked at 11,994 tokens. Context engineering the agent already does for
-itself is doing a lot of the work people credit to compression.
+**2. A competent agent doesn't overflow 32K, and you can't easily make it.**
+It greps instead of reading exhaustively and pipes verbose output through `head`.
+Our 217KB, 20-module, three-bug task peaked at 11,994 tokens. We then built
+task 4 specifically to force an overflow — 462 failing cases across 41 pages,
+with a brief instructing the agent three separate times to page through all of
+them. **It stopped after about ten pages anyway**, formed a correct hypothesis,
+and fixed the bug. Agents do a lot of their own context management, robustly
+enough to resist instruction. Measure that before crediting a tool.
 
-**3. Truncation is not even the cheap option.** On task 3 the truncating arm used
-**86,739 input tokens against paginate's 48,901** — nearly double — *and* threw
-away evidence. Cutting a result to fit means the surviving chunk sits in context
-at full size on every subsequent turn, where pagination spends its tokens once.
-The strategy everyone reaches for first was the worst on both axes.
+**3. Truncation is not reliably the cheap option.** On task 3 the truncating arm
+burned **86,739 input tokens against pagination's 48,901** — 77% more — *and*
+discarded a tool result. On task 4 it did come out 16% cheaper, but again only
+by throwing evidence away. A truncated chunk sits in context at full size on
+every later turn; pagination spends its tokens once. The strategy everyone
+reaches for first is the one with the least predictable cost.
 
-**4. The one case that genuinely overflows is the case Paritok can't help with.**
-A single tool result larger than the window — 306 failing parameterised tests,
-~82,000 tokens from one `pytest` call — kills the run. But the hosted compressor
-**silently returns input verbatim above ~6,000 tokens**, so it declines exactly
-the blocks that cause the problem. Measured, reproducible, and detailed in
-[§4 of FINDINGS](docs/FINDINGS.md). Headroom works around it by paginating into
-~3,100-token pages that sit inside the band where compression works — which turns
-that task from a hard failure into a solved run.
+**4. Compression carries far more context than it's billed for.** On task 4 the
+compressed arm's payload peaked at **26,222 tokens sent against 6,502 billed** —
+it worked through more pages than the uncompressed arm managed, while sitting at
+a fifth of the ceiling. That is the mechanism working exactly as advertised.
+
+**5. The one case that genuinely overflows is the case Paritok can't help with.**
+A single tool result larger than the window — ~82,000 tokens from one `pytest`
+call — kills the run. But the hosted compressor **silently returns input verbatim
+above ~6,000 tokens**, so it declines exactly the blocks that cause the problem.
+Measured, reproducible, and detailed in [§4 of FINDINGS](docs/FINDINGS.md).
+Headroom works around it by paginating into ~3,100-token pages that sit inside
+the band where compression works — which turns that task from a hard failure into
+a solved run.
 
 So the honest summary: **Paritok is a substantial and reliable cost win on
-accumulated multi-turn context, and today it has a size ceiling that stops it
-being a capability unlock.** The workaround is cheap and it's in this repo.
+accumulated multi-turn context, and today a size ceiling stops it being a
+capability unlock.** The workaround is cheap and it's in this repo.
 
 ## Measured results
 
@@ -73,21 +82,24 @@ per arm. The agent is never told which arm it is in.
 
 <!-- RESULTS:START -->
 
-| Task | Strategy | Outcome | Turns | Peak tokens | Total input tokens | Truncated | Tests |
-|---|---|---|---:|---:|---:|---:|:--:|
-| `task01_report_mean` | truncate | ✓ solved | 9 | 7,112 | 30,648 | — | ✅ |
-| `task01_report_mean` | paginate | ✓ solved | 9 | 6,116 | 27,142 | — | ✅ |
-| `task01_report_mean` | **paritok** | ✓ solved | 9 | 2,079 | 13,225 | — | ✅ |
-| `task02_pipeline_triage` | truncate | ✓ solved | 15 | 12,208 | 92,518 | — | ✅ |
-| `task02_pipeline_triage` | paginate | ✓ solved | 15 | 11,994 | 91,167 | — | ✅ |
-| `task02_pipeline_triage` | **paritok** | ✓ solved | 17 | 5,306 | 43,808 | — | ✅ |
-| `task03_verbose_suite` | truncate | ✓ solved | 9 | 13,546 | 86,739 | 1× | ✅ |
-| `task03_verbose_suite` | paginate | ✓ solved | 9 | 8,816 | 48,901 | — | ✅ |
-| `task03_verbose_suite` | **paritok** | ✓ solved | 13 | 6,111 | 43,054 | — | ✅ |
+| Task | Strategy | Outcome | Turns | Peak billed | Peak sent | Total input | Trunc | Tests |
+|---|---|---|---:|---:|---:|---:|---:|:--:|
+| `task01_report_mean` | truncate | ✓ solved | 9 | 7,112 | 10,501 | 30,648 | — | ✅ |
+| `task01_report_mean` | paginate | ✓ solved | 9 | 6,116 | 9,075 | 27,142 | — | ✅ |
+| `task01_report_mean` | **paritok** | ✓ solved | 9 | 2,079 | 9,075 | 13,225 | — | ✅ |
+| `task02_pipeline_triage` | truncate | ✓ solved | 15 | 12,208 | 17,722 | 92,518 | — | ✅ |
+| `task02_pipeline_triage` | paginate | ✓ solved | 15 | 11,994 | 17,352 | 91,167 | — | ✅ |
+| `task02_pipeline_triage` | **paritok** | ✓ solved | 17 | 5,306 | 17,451 | 43,808 | — | ✅ |
+| `task03_verbose_suite` | truncate | ✓ solved | 9 | 13,546 | 17,602 | 86,739 | 1× | ✅ |
+| `task03_verbose_suite` | paginate | ✓ solved | 9 | 8,816 | 12,230 | 48,901 | — | ✅ |
+| `task03_verbose_suite` | **paritok** | ✓ solved | 13 | 6,111 | 12,716 | 43,054 | — | ✅ |
+| `task04_full_audit` | truncate | ✓ solved | 11 | 13,788 | 18,102 | 94,251 | 1× | ✅ |
+| `task04_full_audit` | paginate | ✓ solved | 14 | 12,131 | 16,415 | 111,971 | — | ✅ |
+| `task04_full_audit` | **paritok** | ✓ solved | 16 | 6,502 | 26,222 | 64,320 | — | ✅ |
 
-Measured at the proxy, Paritok compressed the context it saw by **45.3–80.6%** (mean 64.7%).
+Measured at the proxy, Paritok compressed the context it saw by **45.3–80.6%** (mean 67.0%).
 
-End to end, `paritok` used **12.0–51.9% fewer input tokens than `paginate`** (mean 38.4%) while seeing the same evidence and reaching the same fix. Those two arms are identical apart from `base_url`, so the difference is attributable to compression alone.
+End to end, `paritok` used **12.0–51.9% fewer input tokens than `paginate`** (mean 39.4%) while seeing the same evidence and reaching the same fix. Those two arms are identical apart from `base_url`, so the difference is attributable to compression alone.
 
 <!-- RESULTS:END -->
 

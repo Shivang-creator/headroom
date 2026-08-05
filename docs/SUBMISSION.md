@@ -45,8 +45,8 @@ where it's satisfied. Anything still open is marked ⬜ and needs a human.
 - Measured reduction inside a real multi-turn debugging workflow, not a synthetic
   prompt: **the `paritok` arm uses ~50% fewer input tokens end-to-end than the
   identical `paginate` arm**, which differs only by `base_url`.
-- Proxy-level compression measured separately at **68–82%**.
-- Three seeded tasks a judge can reproduce in five minutes.
+- Proxy-level compression measured separately at **45–81%** (mean 67%).
+- Four seeded tasks a judge can reproduce in five minutes; 12 runs, all green.
 - Every number is emitted by the harness and exported to the README — no
   hand-typed figures.
 - We also mapped where Paritok *stops* working (§4 of FINDINGS) and shipped a fix.
@@ -96,7 +96,7 @@ where it's satisfied. Anything still open is marked ⬜ and needs a human.
 - [README](../README.md) leads with the finding, including the one that
   contradicted our hypothesis.
 - [RUNME.md](../RUNME.md) — exact reproduction, plus a troubleshooting section.
-- [FINDINGS.md](FINDINGS.md) — six sections, every claim backed by a number.
+- [FINDINGS.md](FINDINGS.md) — seven sections, every claim backed by a number.
 - [`examples/`](../examples/) — judges can evaluate without running anything.
 
 ### 6. Bonus — Meaningful Open-Source Contribution
