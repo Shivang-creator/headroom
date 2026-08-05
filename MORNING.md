@@ -48,8 +48,8 @@ export PARITOK_API_KEY=... FEATHERLESS_API_KEY=...   # values in ../Hackathon Br
 
 ## The results
 
-All three tasks, three strategies each. Every arm solved every task with the same
-patches and green tests.
+All four tasks, three strategies each — 12 runs. Every arm solved every task with
+the same patches and green tests.
 
 | Task | truncate | paginate | **paritok** |
 |---|---:|---:|---:|
@@ -83,7 +83,7 @@ didn't support that, so we don't claim it.** What we found instead:
    failing cases over 41 pages and a brief telling the agent three times to read
    every page. It stopped after ~10, reasoned correctly, and fixed the bug.
    Agents self-limit robustly enough to resist instruction — FINDINGS §7.
-4. The one case that does overflow is the case **Paritok currently can't help
+5. The one case that does overflow is the case **Paritok currently can't help
    with** — the hosted compressor silently returns input verbatim above ~6,000
    tokens. Reproducible via `tools/probe_block_size.py`, identical across two
    runs. Headroom ships the fix (pagination into ~3,100-token pages).
