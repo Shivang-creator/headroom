@@ -143,10 +143,11 @@ class Agent:
             shown = actual or est
             suffix = "" if actual else "  (est)"
             # Only the compressed arm can shrink between what we send and what
-            # the model is billed for. The local estimator over-reads by ~30% on
-            # code and log text, so gating on the ratio alone mislabels the
-            # uncompressed arms as compressed.
-            if actual and self.cfg.paritok and est > actual * 1.3:
+            # the model is billed for. The local estimator over-reads by ~30-40%
+            # on code and log text, so the threshold has to sit well clear of
+            # that bias or turn 1 — where nothing has been compressed yet — gets
+            # labelled as a 30% saving.
+            if actual and self.cfg.paritok and est > actual * 2.0:
                 suffix = f"  ← {est:,} sent, compressed {100 * (1 - actual / est):.0f}%"
             print(f"  [{self.cfg.label}] turn {turn:>2}  {self.gov.bar(shown)}{suffix}",
                   flush=True)

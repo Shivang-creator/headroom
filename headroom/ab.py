@@ -1,13 +1,16 @@
-"""A/B runner — the same task, twice, differing only in whether Paritok is on.
+"""Comparison runner — the same task under each strategy for oversized output.
 
-Each arm gets a pristine copy of the task repo. Without that, the second arm
-would start from the first arm's patch and the comparison would be nonsense.
+Each arm gets a pristine copy of the task repo. Without that, later arms would
+start from an earlier arm's patch and the comparison would be nonsense.
+
+`paginate` and `paritok` differ only by `base_url`, which is what makes the
+compression number attributable to compression rather than to the agent
+behaving differently.
 """
 from __future__ import annotations
 
 import json
 import shutil
-import time
 import uuid
 from pathlib import Path
 

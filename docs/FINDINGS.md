@@ -208,6 +208,45 @@ a 23% increase to cut input tokens by 81.6%.
 
 ---
 
+## 7. Agents self-limit, and you cannot easily stop them
+
+This is the finding that killed our original pitch, and we tried hard to falsify
+it before accepting it.
+
+To claim compression is a *capability* unlock we needed a workload where the
+uncompressed agent exhausts the window and the compressed one doesn't. Three
+attempts:
+
+1. **A wide codebase** (task 2 — 217 KB, 20 modules, 3 unrelated bugs). The agent
+   grepped, read four files, and finished at 11,994 peak tokens. Breadth doesn't
+   fill a window.
+2. **A huge single tool result** (task 3 — 306 failing tests, ~82,000 tokens from
+   one `pytest`). The agent piped it through `head`. When we forced the full
+   result in, *both* arms died — because the compressor passes through blocks
+   that large (§4).
+3. **An explicit instruction to audit everything** (task 4 — 462 failing cases,
+   41 pages, and a brief that says in three separate places to call `next_page`
+   until no pages remain, not to sample, and not to stop early).
+
+Attempt 3 is the interesting one. **The agent stopped after roughly ten pages
+anyway** — about a quarter of the output — formed a hypothesis, and went to fix
+the bug. It was *right*, and the fix was correct. But it did not do what it was
+told, and no amount of instruction-tightening reliably changed that.
+
+The practical conclusion: a competent agent performs a great deal of its own
+context management, and it does so robustly enough to resist being told
+otherwise. Before attributing a context saving to any tool, measure how much the
+agent was already saving on its own. That is what the `truncate` / `paginate`
+comparison is for.
+
+Where compression clearly does help during that paging workload is holding
+context *flat*. On task 4 the compressed arm sat around 2,000 billed tokens
+while sending 11,497 — 83% compressed — as it paged, where the uncompressed arm
+grew monotonically. Compression doesn't make the agent read more; it makes what
+it did read much cheaper to keep.
+
+---
+
 ## 6. Why we compare three strategies, not two
 
 An on/off comparison quietly assumes the alternative to compression is "send

@@ -382,6 +382,78 @@ TASK3 = {
 }
 
 
+# --------------------------------------------------------------------------
+# Task 4 — the full-audit workflow, where paging itself fills the window.
+#
+# Tasks 1-3 all fit under the ceiling because the agent stops early: it spots
+# the failure pattern after a page or two and goes straight to the fix. That is
+# good behaviour, and it is why we could not honestly claim "the agent dies
+# without compression."
+#
+# But "characterise every failure before you touch the code" is a real triage
+# instruction — you give it when you need to know a fix addresses the whole
+# failure set rather than the first symptom. It forces the agent to page through
+# everything, and *that* is what fills a 32,768-token window: 484 failing cases
+# is ~40 pages at ~3,100 tokens each.
+#
+# This is where compression stops being a discount and starts being the thing
+# that makes the workflow possible. The paginate arm should exhaust the window
+# partway through the audit; the paritok arm should compress the pages it has
+# already read and keep going.
+# --------------------------------------------------------------------------
+TASK4 = {
+    "name": "task04_full_audit",
+    "brief": (
+        "This repo's grid evaluator is failing across every parameterised case.\n\n"
+        "Before changing any code, AUDIT THE COMPLETE FAILURE SET:\n"
+        "  1. Run `python -m pytest -q` to get the failures.\n"
+        "  2. The output is paginated. Call next_page repeatedly until it reports "
+        "that no pages remain. Do not stop early, do not sample, and do not pipe "
+        "the command through head/tail or use -x.\n"
+        "  3. Only once you have seen every page, state how many cases failed and "
+        "whether they share a single root cause.\n\n"
+        "Then fix the root cause and confirm the suite passes. Do not modify the tests.\n\n"
+        "This matters because a fix that resolves the first few failures but not the "
+        "rest is worse than no fix — it looks green locally and breaks in CI."
+    ),
+    "files": {
+        "gridcalc/__init__.py": "from .grid import evaluate\n\n__all__ = ['evaluate']\n",
+        "gridcalc/grid.py": (
+            FILLER_DOC.format(title="Grid evaluation.", body=_prose(8, "grid"))
+            + "from .transform import apply_transform\n\n\n"
+            "def evaluate(rows, cols):\n"
+            '    """Build a rows x cols grid of transformed cell values."""\n'
+            "    return [[apply_transform(r, c) for c in range(cols)] for r in range(rows)]\n\n\n"
+            + _helpers("grid", 12)
+        ),
+        "gridcalc/transform.py": (
+            FILLER_DOC.format(title="Cell transform.", body=_prose(8, "transform"))
+            + "def apply_transform(row, col):\n"
+            '    """Weighted cell value: row contributes triple, column single."""\n'
+            "    # BUG: the axes are transposed.\n"
+            "    return (col * 3) + (row * 1)\n\n\n"
+            + _helpers("transform", 12)
+        ),
+        "tests/test_grid.py": (
+            "import pytest\n\n"
+            "from gridcalc import evaluate\n\n\n"
+            "def expected(row, col):\n"
+            "    return (row * 3) + (col * 1)\n\n\n"
+            "CASES = [(r, c) for r in range(22) for c in range(22)]\n\n\n"
+            "@pytest.mark.parametrize('row,col', CASES)\n"
+            "def test_every_cell_is_weighted_correctly(row, col):\n"
+            "    grid = evaluate(22, 22)\n"
+            "    context = {\n"
+            "        'row': row, 'col': col,\n"
+            "        'row_values': grid[row],\n"
+            "        'col_values': [grid[r][col] for r in range(22)],\n"
+            "    }\n"
+            "    assert grid[row][col] == expected(row, col), context\n"
+        ),
+    },
+}
+
+
 def write_task(spec: dict) -> Path:
     root = HERE / spec["name"]
     if root.exists():
@@ -395,7 +467,7 @@ def write_task(spec: dict) -> Path:
 
 
 def main() -> None:
-    for spec in (TASK1, TASK2, TASK3):
+    for spec in (TASK1, TASK2, TASK3, TASK4):
         root = write_task(spec)
         total = sum(p.stat().st_size for p in root.rglob("*") if p.is_file())
         print(f"{spec['name']}: {total:,} bytes  (~{int(total / 2.9):,} tokens if fully read)")

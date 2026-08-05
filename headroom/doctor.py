@@ -14,8 +14,6 @@ Paritok's own issue #29 asks for a preflight doctor command. This is ours.
 """
 from __future__ import annotations
 
-import json
-from pathlib import Path
 
 import httpx
 
