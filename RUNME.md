@@ -49,17 +49,29 @@ curl -s http://127.0.0.1:8080/stats
 
 ---
 
-## 2. Run the comparison — terminal 2
+## 2. Preflight — terminal 2
 
 ```bash
 cd ~/Projects/headroom
 export PARITOK_API_KEY=... FEATHERLESS_API_KEY=...
 
+.venv/bin/python -m headroom doctor
+```
+
+Do this before trusting any number. Compression failing silently is the failure
+mode that wastes a day — the request succeeds, `/stats` increments, and nothing
+was compressed. `doctor` catches every trap that cost us time: wrong
+`context_window`, a model that doesn't emit native tool calls, a compressor
+returning input verbatim.
+
+## 3. Run the comparison
+
+```bash
 .venv/bin/python -m headroom ab tasks/task02_pipeline_triage
 ```
 
-Each task runs twice — straight to Featherless, then through the proxy — against
-a fresh copy of the repo each time. Roughly 60–90 seconds per arm.
+Each task runs **three** ways against a fresh copy of the repo — `truncate`,
+`paginate`, `paritok`. Roughly 60–90 seconds per arm.
 
 The three seeded tasks, in increasing order of context pressure:
 
@@ -69,9 +81,18 @@ The three seeded tasks, in increasing order of context pressure:
 .venv/bin/python -m headroom ab tasks/task03_verbose_suite     # 306 failing cases
 ```
 
+Restrict to specific arms with `--arms paginate paritok` if you only want the
+compression comparison.
+
+## 4. Tests
+
+```bash
+.venv/bin/python -m pytest tests/ -q     # 38 tests, ~0.2s, no network
+```
+
 ---
 
-## 3. Dashboard — terminal 3
+## 5. Dashboard — terminal 3
 
 ```bash
 cd ~/Projects/headroom
@@ -87,11 +108,14 @@ compression totals from the proxy.
 ## Other commands
 
 ```bash
+.venv/bin/python -m headroom doctor    # preflight
 .venv/bin/python -m headroom stats     # live proxy compression totals
 .venv/bin/python -m headroom tasks     # list the seeded tasks
-.venv/bin/python -m headroom agent tasks/task01_report_mean --paritok  # one arm
 .venv/bin/python -m headroom export    # refresh README table + examples/
-.venv/bin/python tools/probe_models.py # re-pick a usable upstream model
+.venv/bin/python -m headroom agent tasks/task01_report_mean --strategy paritok
+
+.venv/bin/python tools/probe_models.py      # re-pick a usable upstream model
+.venv/bin/python tools/probe_block_size.py  # map the compressor's working range
 ```
 
 ---

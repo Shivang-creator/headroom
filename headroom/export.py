@@ -27,23 +27,38 @@ def _outcome_cell(r: dict) -> str:
     return f"✗ {r['outcome']}"
 
 
+ARM_ORDER = {"truncate": 0, "paginate": 1, "paritok": 2}
+
+
 def results_table(store: Store) -> str:
     lines = [
-        "| Task | Arm | Outcome | Turns | Peak prompt tokens | Total input tokens | Tests |",
-        "|---|---|---|---:|---:|---:|:--:|",
+        "| Task | Strategy | Outcome | Turns | Peak tokens | Total input tokens | Truncated | Tests |",
+        "|---|---|---|---:|---:|---:|---:|:--:|",
     ]
-    savings = []
+    savings, paired = [], []
     for pair in reversed(store.pairs()):
-        runs = store.runs_for_pair(pair["pair_id"])
+        runs = sorted(store.runs_for_pair(pair["pair_id"]),
+                      key=lambda r: ARM_ORDER.get(r["strategy"] or "paginate", 9))
         if len(runs) < 2:
             continue
+        by_strategy = {r["strategy"]: r for r in runs}
         for r in runs:
-            arm = "Paritok **on**" if r["paritok"] else "Paritok off"
+            arm = r["strategy"] or ("paritok" if r["paritok"] else "paginate")
+            arm_label = f"**{arm}**" if arm == "paritok" else arm
+            trunc = r["truncations"] or 0
             lines.append(
-                f"| `{r['task']}` | {arm} | {_outcome_cell(r)} | {r['turns_completed']} | "
+                f"| `{r['task']}` | {arm_label} | {_outcome_cell(r)} | {r['turns_completed']} | "
                 f"{r['peak_prompt_tokens']:,} | {r['total_prompt_tokens']:,} | "
+                f"{str(trunc) + '×' if trunc else '—'} | "
                 f"{'✅' if r['tests_passed'] == 1 else '❌'} |"
             )
+        # paginate vs paritok is the clean attribution: identical agents,
+        # identical evidence, only base_url differs.
+        pg, pk = by_strategy.get("paginate"), by_strategy.get("paritok")
+        if pg and pk and pg["outcome"] == "solved" and pk["outcome"] == "solved":
+            if pg["total_prompt_tokens"]:
+                paired.append(100 * (pg["total_prompt_tokens"] - pk["total_prompt_tokens"])
+                              / pg["total_prompt_tokens"])
             # Savings are only meaningful for runs that actually completed. An
             # overflowed run dies after two requests having compressed nothing;
             # averaging its 0% in would understate compression on the runs that
@@ -59,17 +74,16 @@ def results_table(store: Store) -> str:
     if savings:
         lines.append("")
         lines.append(
-            f"Across the {len(savings)} runs that completed, Paritok cut input tokens by "
-            f"**{min(savings):.1f}–{max(savings):.1f}%** "
-            f"(mean {sum(savings) / len(savings):.1f}%), with both arms reaching the "
-            f"same outcome — same patches, tests green — on every task."
+            f"Measured at the proxy, Paritok compressed the context it saw by "
+            f"**{min(savings):.1f}–{max(savings):.1f}%** (mean {sum(savings) / len(savings):.1f}%)."
         )
+    if paired:
         lines.append("")
         lines.append(
-            "The `overflow at turn 2` rows are the unpaginated version of task 3, kept "
-            "deliberately: a single 82,000-token tool result kills **both** arms, because "
-            "the compressor passes through blocks above ~6,000 tokens. Pagination is what "
-            "fixes it — see [docs/FINDINGS.md §4](docs/FINDINGS.md)."
+            f"End to end, `paritok` used **{min(paired):.1f}–{max(paired):.1f}% fewer input "
+            f"tokens than `paginate`** (mean {sum(paired) / len(paired):.1f}%) while seeing "
+            f"the same evidence and reaching the same fix. Those two arms are identical "
+            f"apart from `base_url`, so the difference is attributable to compression alone."
         )
     return "\n".join(lines)
 
@@ -81,9 +95,9 @@ def write_examples(store: Store) -> int:
         runs = store.runs_for_pair(pair["pair_id"])
         if len(runs) < 2:
             continue
-        out = [f"# {pair['task']} — pair `{pair['pair_id']}`\n"]
-        for r in runs:
-            arm = "Paritok ON" if r["paritok"] else "Paritok OFF"
+        out = [f"# {pair['task']} — comparison `{pair['pair_id']}`\n"]
+        for r in sorted(runs, key=lambda x: ARM_ORDER.get(x["strategy"] or "paginate", 9)):
+            arm = r["strategy"] or ("paritok" if r["paritok"] else "paginate")
             out.append(f"\n## {arm}\n")
             out.append(
                 f"- outcome: **{_outcome_cell(r)}**\n"
@@ -91,6 +105,7 @@ def write_examples(store: Store) -> int:
                 f"- peak prompt tokens: {r['peak_prompt_tokens']:,}\n"
                 f"- total input tokens: {r['total_prompt_tokens']:,}\n"
                 f"- patches applied: {r['patches_applied']}\n"
+                f"- tool results truncated: {r['truncations'] or 0}\n"
                 f"- wall time: {r['wall_time_s']}s\n"
             )
             if r["paritok_stats"]:

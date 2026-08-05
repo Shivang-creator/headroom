@@ -208,6 +208,36 @@ a 23% increase to cut input tokens by 81.6%.
 
 ---
 
+## 6. Why we compare three strategies, not two
+
+An on/off comparison quietly assumes the alternative to compression is "send
+everything uncompressed." It isn't. The real alternative — what most agents do
+today — is **truncation**: cut the oversized result to fit and hope the useful
+part survived.
+
+Measuring only on/off therefore overstates compression's value, because it
+credits compression for savings that truncation would also deliver, and hides
+what truncation *costs*. So every task runs three ways:
+
+| Arm | Sees all the evidence? | Context cost |
+|---|:--:|---|
+| `truncate` | ✗ discards the tail | low |
+| `paginate` | ✓ | full price |
+| `paritok` | ✓ | ~1/5 |
+
+The two comparisons answer different questions:
+
+- **`truncate` vs `paginate`** — what does it cost to see everything?
+- **`paginate` vs `paritok`** — what is compression worth? These two arms are
+  byte-identical apart from `base_url`, so the difference is attributable to
+  compression and nothing else.
+
+That second pairing is the number we quote, and it is deliberately the
+conservative one: it compares compression against an agent that is already
+handling large output well, not against a straw man.
+
+---
+
 ## 5. What compression cost us in quality
 
 The honest question isn't whether compression saves tokens — it obviously does —

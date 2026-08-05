@@ -24,12 +24,16 @@
   .tile .v { font-size:21px; font-weight:600; font-family:var(--mono); margin-top:4px; }
   select { background:var(--panel); color:var(--fg); border:1px solid var(--line);
            border-radius:6px; padding:8px 10px; font-size:13px; width:100%; max-width:520px; }
-  .cols { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px; }
-  @media (max-width:800px){ .cols{ grid-template-columns:1fr; } }
+  .cols { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+          gap:16px; margin-top:20px; }
   .arm { background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
   .arm h2 { margin:0; padding:12px 16px; font-size:13px; letter-spacing:.04em;
-            text-transform:uppercase; border-bottom:1px solid var(--line); }
-  .arm.off h2 { color:var(--off); } .arm.on h2 { color:var(--on); }
+            text-transform:uppercase; border-bottom:1px solid var(--line);
+            display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .arm h2 .tag { font-size:10px; letter-spacing:0; text-transform:none; color:var(--dim); }
+  .arm.truncate h2 { color:var(--warn); }
+  .arm.paginate h2 { color:var(--dim); }
+  .arm.paritok  h2 { color:var(--on); }
   .kv { display:flex; justify-content:space-between; padding:7px 16px; font-size:13px; }
   .kv:nth-child(even){ background:rgba(255,255,255,.02); }
   .kv .n { color:var(--dim); } .kv .v { font-family:var(--mono); }
@@ -50,7 +54,7 @@
 <header>
   <h1>Headroom</h1>
   <div class="sub">A coding agent inside a 32,768-token ceiling —
-    the same task run with and without Paritok compression.</div>
+    three strategies for oversized tool output: truncate, paginate, and paginate+compress.</div>
 </header>
 
 <div class="wrap">
@@ -82,8 +86,14 @@ async function loadStats() {
     `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
 }
 
+const BLURB = {
+  truncate: "cut to fit — blind",
+  paginate: "see all — full cost",
+  paritok:  "see all — compressed",
+};
+
 function armCard(r) {
-  const on = r.paritok === 1;
+  const arm = r.strategy || (r.paritok === 1 ? "paritok" : "paginate");
   const peak = r.peak_prompt_tokens || 0;
   const solved = r.outcome === "solved" && r.tests_passed === 1;
 
@@ -99,11 +109,13 @@ function armCard(r) {
     verdict = `<span class="bad">✗ ${r.outcome}</span>`;
   }
 
+  const trunc = r.truncations || 0;
   const rows = [
     ["turns completed", fmt(r.turns_completed)],
     ["peak prompt tokens", fmt(peak)],
-    ["total prompt tokens", fmt(r.total_prompt_tokens)],
+    ["total input tokens", fmt(r.total_prompt_tokens)],
     ["patches applied", fmt(r.patches_applied)],
+    ["output truncated", trunc ? `${trunc}× — evidence lost` : "none"],
     ["wall time", r.wall_time_s ? r.wall_time_s + "s" : "—"],
   ];
 
@@ -116,31 +128,43 @@ function armCard(r) {
         style="width:${pct}%"></div></td></tr>`;
   }).join("");
 
-  return `<div class="arm ${on ? "on" : "off"}">
-    <h2>${on ? "Paritok ON" : "Paritok OFF"}</h2>
+  return `<div class="arm ${arm}">
+    <h2><span>${arm}</span><span class="tag">${BLURB[arm] || ""}</span></h2>
     ${rows.map(([n, v]) => `<div class="kv"><span class="n">${n}</span><span class="v">${v}</span></div>`).join("")}
     <div class="verdict">${verdict}</div>
     <table><tr><th>turn</th><th>tool</th><th>prompt tok</th><th>vs ceiling</th></tr>${turns}</table>
   </div>`;
 }
 
+const ORDER = { truncate: 0, paginate: 1, paritok: 2 };
+
 async function loadPair(id) {
   const d = await j("/api/pair/" + id);
-  const off = d.runs.find(r => r.paritok === 0);
-  const on = d.runs.find(r => r.paritok === 1);
-  let note = "";
-  const st = on && on.paritok_stats;
+  const runs = d.runs.slice().sort((a, b) =>
+    (ORDER[a.strategy] ?? 9) - (ORDER[b.strategy] ?? 9));
+
+  const notes = [];
+  const pk = runs.find(r => r.strategy === "paritok");
+  const pg = runs.find(r => r.strategy === "paginate");
+
+  const st = pk && pk.paritok_stats;
   if (st && st.input_tokens_original) {
     const pct = (100 * st.tokens_saved / st.input_tokens_original).toFixed(1);
-    note = `<p class="sub" style="margin-top:16px">Paritok compressed
-      <code>${fmt(st.input_tokens_original)}</code> →
-      <code>${fmt(st.input_tokens_compressed)}</code> input tokens across
-      ${st.total_requests} requests — <strong>${pct}% saved</strong>.</p>`;
+    notes.push(`Paritok compressed <code>${fmt(st.input_tokens_original)}</code> →
+      <code>${fmt(st.input_tokens_compressed)}</code> tokens across
+      ${st.total_requests} requests — <strong>${pct}% saved</strong>.`);
   }
-  $("body").innerHTML = `<div class="cols">
-      ${off ? armCard(off) : "<div class='empty'>no off arm</div>"}
-      ${on ? armCard(on) : "<div class='empty'>no on arm</div>"}
-    </div>${note}`;
+  if (pk && pg && pg.total_prompt_tokens && pk.total_prompt_tokens) {
+    const cut = (100 * (pg.total_prompt_tokens - pk.total_prompt_tokens)
+                 / pg.total_prompt_tokens).toFixed(1);
+    notes.push(`Same evidence, same fix: <code>${fmt(pg.total_prompt_tokens)}</code> →
+      <code>${fmt(pk.total_prompt_tokens)}</code> input tokens —
+      <strong>${cut}% less</strong>. These two arms differ only by
+      <code>base_url</code>.`);
+  }
+
+  $("body").innerHTML = `<div class="cols">${runs.map(armCard).join("")}</div>` +
+    notes.map(n => `<p class="sub" style="margin-top:14px">${n}</p>`).join("");
 }
 
 async function boot() {

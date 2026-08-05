@@ -34,38 +34,58 @@ Maximum context length for model 'zai-org/GLM-5.1' allowed on your plan is
 32768 tokens. Your prompt has 38435 tokens.
 ```
 
-## 0:20–0:45 — What Headroom is
+## 0:20–0:50 — What Headroom is, and why three arms
 
 > "Headroom is a coding agent that fixes real bugs, plus a harness that measures
-> what context compression is worth. It runs every task twice — once straight to
-> the provider, once through the Paritok proxy — on a fresh copy of the repo each
-> time. The agent is never told which run it's in."
+> what context compression is worth. Most comparisons would run this on and off.
+> That's misleading — because the real alternative to compression isn't sending
+> everything, it's *truncating*. Cutting the output to fit and hoping the useful
+> part survived. So every task runs three ways."
 
-**Show:** `headroom/config.py` — highlight that `base_url` is the only difference
-between arms. Then the architecture block from the README.
+**Show:** the three-strategy table from the README.
 
-## 0:45–1:40 — The run
+> "Truncate, and you're cheap but blind. Paginate through everything, and you see
+> it all at full price. Or paginate *and* compress. The last two are
+> byte-identical apart from one line — which URL the request goes to — so any
+> difference between them is compression and nothing else."
+
+**Show:** `headroom/config.py`, the `base_url` property.
+
+## 0:50–1:10 — Preflight
+
+> "One thing first, because it's the trap that cost us a night: compression can
+> fail completely silently. The request succeeds, the stats counter goes up, and
+> nothing was compressed."
+
+**Show:** `.venv/bin/python -m headroom doctor`
+
+> "So there's a preflight. It checks the config values that silently disable
+> compression, and it actually round-trips a block through the compressor to
+> confirm it comes back smaller. Paritok's own issue tracker asks for a doctor
+> command — this is ours."
+
+## 1:10–2:00 — The run
 
 > "Here's a repo with three unrelated bugs across twenty modules. The failing test
 > doesn't name the culprit, so the agent has to trace the data path."
 
 **Show:** `.venv/bin/python -m headroom ab tasks/task02_pipeline_triage`
 
-Let the headroom bars actually climb on screen — that's the whole visual. Talk
-over it:
+Let the headroom bars climb — that's the visual. Talk over it:
 
-> "Every file read, every test run, every log line stays in the conversation.
-> Watch the context grow. On the left run that's real tokens going to the
-> provider. On the right, Paritok is compressing the accumulated history in
-> flight before it ever leaves the machine."
+> "Every file read, every test run stays in the conversation. Watch the context
+> grow against the ceiling. On the compressed arm, Paritok is squeezing the
+> accumulated history in flight before it ever reaches the model."
 
 **Land on the comparison table.**
 
-> "Both runs solved it. Same three patches, tests green in both. But the
-> compressed run used 37,000 input tokens against 91,000 — **81.6% fewer**, for
-> one extra turn."
+> "All three solved it. Same three patches, tests green everywhere. But look at
+> the cost: ninety-one thousand input tokens to page through it uncompressed,
+> forty-four thousand with compression. **Fifty-two percent less, for the same
+> evidence and the same fix.** At the proxy, Paritok compressed what it saw by
+> eighty-one percent."
 
-## 1:40–2:10 — The honest part
+## 2:00–2:30 — The honest part, and the fix
 
 > "We set out to show the agent dying without compression and surviving with it.
 > The data didn't support that, so we're not claiming it."
@@ -75,24 +95,18 @@ over it:
 > "A competent agent doesn't overflow 32K as easily as we assumed — it greps
 > instead of reading everything. What *does* overflow it is a single huge tool
 > result: three hundred failing tests, eighty-two thousand tokens from one pytest
-> call. And that's the case Paritok can't currently help with — we measured that
-> the hosted compressor silently returns input unchanged above about six thousand
-> tokens."
+> call. And that turned out to be the case Paritok can't currently help with. We
+> measured it: the hosted compressor returns input unchanged above about six
+> thousand tokens, silently, while the default config allows fifty thousand."
 
 **Show:** the block-size table, briefly.
 
-## 2:10–2:35 — The fix we shipped
-
-> "So Headroom paginates. Oversized tool output gets split into three-thousand-token
+> "So Headroom paginates — oversized output gets split into three-thousand-token
 > pages that land inside the band where compression actually works. That turns
-> that task from a hard failure into a solved run."
-
-**Show:** the task 3 before/after rows in the results table.
-
-> "That finding is reproducible — there's a script in the repo — and it's filed
+> the failing task into a solved one. Reproducible script in the repo, filed
 > upstream."
 
-## 2:35–2:50 — Close
+## 2:30–2:50 — Close
 
 **Show:** dashboard, then the Paritok dashboard tab with real usage on it.
 

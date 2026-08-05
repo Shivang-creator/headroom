@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 from .ab import format_comparison, proxy_stats, run_arm, run_pair
-from .config import DEFAULT_MODEL, PROXY_BASE_URL
+from .config import ARMS, DEFAULT_MODEL, PROXY_BASE_URL
 from .store import Store
 
 TASKS_DIR = Path(__file__).resolve().parent.parent / "tasks"
@@ -48,14 +48,17 @@ def main(argv: list[str] | None = None) -> None:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    p_ab = sub.add_parser("ab", help="run a task twice, with and without Paritok")
+    p_ab = sub.add_parser("ab", help="run a task under each strategy and compare")
     p_ab.add_argument("task")
+    p_ab.add_argument("--arms", nargs="+", choices=ARMS, default=list(ARMS),
+                      help="which strategies to run (default: all three)")
     p_ab.add_argument("--model", default=DEFAULT_MODEL)
     p_ab.add_argument("--max-turns", type=int, default=40)
     p_ab.add_argument("--json", action="store_true", help="emit the result as JSON")
 
     p_one = sub.add_parser("agent", help="run a single arm")
     p_one.add_argument("task")
+    p_one.add_argument("--strategy", choices=ARMS, default="paginate")
     p_one.add_argument("--paritok", action="store_true", help="route through the proxy")
     p_one.add_argument("--model", default=DEFAULT_MODEL)
     p_one.add_argument("--max-turns", type=int, default=40)
@@ -66,8 +69,13 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("stats", help="print the proxy's live compression totals")
     sub.add_parser("tasks", help="list the seeded tasks")
     sub.add_parser("export", help="refresh the README results table and examples/")
+    sub.add_parser("doctor", help="preflight: verify compression will actually fire")
 
     args = ap.parse_args(argv)
+
+    if args.cmd == "doctor":
+        from .doctor import main as doctor_main
+        sys.exit(doctor_main())
 
     if args.cmd == "export":
         from .export import main as export_main
@@ -95,8 +103,9 @@ def main(argv: list[str] | None = None) -> None:
     store = Store()
 
     if args.cmd == "ab":
-        _require_proxy()
-        pair = run_pair(_resolve_task(args.task), store,
+        if "paritok" in args.arms:
+            _require_proxy()
+        pair = run_pair(_resolve_task(args.task), store, arms=args.arms,
                         model=args.model, max_turns=args.max_turns)
         print(format_comparison(pair))
         if args.json:
@@ -104,11 +113,12 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     if args.cmd == "agent":
-        if args.paritok:
+        paritok = args.paritok or args.strategy == "paritok"
+        if paritok:
             _require_proxy()
         import uuid
-        result = run_arm(_resolve_task(args.task), uuid.uuid4().hex[:12], args.paritok, store,
-                         model=args.model, max_turns=args.max_turns)
+        result = run_arm(_resolve_task(args.task), uuid.uuid4().hex[:12], paritok, store,
+                         strategy=args.strategy, model=args.model, max_turns=args.max_turns)
         print(json.dumps(result, indent=2, default=str))
 
 

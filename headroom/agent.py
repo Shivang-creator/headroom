@@ -44,7 +44,11 @@ Rules:
 class Agent:
     def __init__(self, cfg: RunConfig, workdir: Path, store: Store | None = None):
         self.cfg = cfg
-        self.tools = Toolbox(workdir, max_tool_output=cfg.max_tool_output)
+        self.tools = Toolbox(
+            workdir,
+            max_tool_output=cfg.effective_tool_budget,
+            paginate=cfg.paginate,
+        )
         self.gov = Governor()
         self.store = store
         self.messages: list[dict] = []
@@ -113,7 +117,11 @@ class Agent:
     # -- main loop --------------------------------------------------------
     def run(self, task_name: str, task_prompt: str, pair_id: str | None = None) -> dict:
         pair_id = pair_id or uuid.uuid4().hex[:12]
-        run_id = self.store.start_run(pair_id, task_name, self.cfg.paritok, self.cfg.model) if self.store else None
+        run_id = (
+            self.store.start_run(pair_id, task_name, self.cfg.paritok, self.cfg.model,
+                                 self.cfg.strategy)
+            if self.store else None
+        )
 
         self.messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -125,9 +133,23 @@ class Agent:
 
         for turn in range(1, self.cfg.max_turns + 1):
             est = estimate_tokens(self.messages, SCHEMAS)
-            print(f"  [{self.cfg.label}] turn {turn:>2}  {self.gov.bar(est)}", flush=True)
-
             data, err_body, latency = self._post()
+
+            # Report the *billed* prompt size, not our pre-flight estimate. On
+            # the paritok arm those differ by 5x — the estimate is what we hand
+            # the proxy, the actual is what survives compression and reaches the
+            # model. Showing the estimate made compression look like a no-op.
+            actual = ((data or {}).get("usage") or {}).get("prompt_tokens")
+            shown = actual or est
+            suffix = "" if actual else "  (est)"
+            # Only the compressed arm can shrink between what we send and what
+            # the model is billed for. The local estimator over-reads by ~30% on
+            # code and log text, so gating on the ratio alone mislabels the
+            # uncompressed arms as compressed.
+            if actual and self.cfg.paritok and est > actual * 1.3:
+                suffix = f"  ← {est:,} sent, compressed {100 * (1 - actual / est):.0f}%"
+            print(f"  [{self.cfg.label}] turn {turn:>2}  {self.gov.bar(shown)}{suffix}",
+                  flush=True)
 
             if err_body is not None:
                 rec = TurnRecord(turn, None, est, latency_s=latency, error=err_body[:2000])
@@ -238,6 +260,8 @@ class Agent:
             "overflow_tokens": self.gov.overflow_tokens,
             "tests_passed": tests_passed,
             "patches_applied": self.tools.patches_applied,
+            "truncations": self.tools.truncations,
+            "strategy": self.cfg.strategy,
             "wall_time_s": round(wall, 1),
             "summary": summary,
             "error": error,
@@ -255,6 +279,7 @@ class Agent:
                 overflow_tokens=result["overflow_tokens"],
                 tests_passed=None if tests_passed is None else int(tests_passed),
                 patches_applied=result["patches_applied"],
+                truncations=result["truncations"],
                 wall_time_s=result["wall_time_s"],
                 error=error,
             )

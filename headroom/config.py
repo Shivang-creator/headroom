@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -26,7 +27,13 @@ PROXY_BASE_URL = "http://127.0.0.1:8080/v1"
 # Native context 202,752 — the plan still caps it at 32,768, which is the point.
 DEFAULT_MODEL = "zai-org/GLM-5.1"
 
+# What a truncating agent keeps: ~24,000 chars ≈ 8,300 tokens. Roughly a quarter
+# of the ceiling, which is a realistic budget to give one tool result when you
+# still need room for the rest of the conversation.
+TRUNCATE_BUDGET = 24_000
 
+
+@lru_cache(maxsize=1)
 def _load_keys() -> dict[str, str]:
     """Read keys from the env, falling back to the brainstorm folder's .keys.env.
 
@@ -61,11 +68,28 @@ def _load_keys() -> dict[str, str]:
     return keys
 
 
+# The three strategies anyone actually has for oversized tool output.
+#
+#   truncate  cut it to fit and hope the informative part survived. What most
+#             agents do today, and it is not a straw man — it is cheap and it
+#             usually works. It also silently discards evidence.
+#   paginate  page through the whole thing, uncompressed. Nothing is lost, but
+#             every page costs full-price context against the ceiling.
+#   paritok   page through it *and* compress each page. Nothing lost, ~1/5 the
+#             context.
+#
+# Comparing only "compression on/off" hides the fact that the honest baseline
+# is truncation, so all three run.
+ARMS = ("truncate", "paginate", "paritok")
+
+
 @dataclass(frozen=True)
 class RunConfig:
     """One arm of a comparison."""
 
     paritok: bool
+    # How this arm handles a tool result bigger than its budget.
+    strategy: str = "paginate"
     model: str = DEFAULT_MODEL
     max_turns: int = 40
     temperature: float = 0.0
@@ -86,7 +110,17 @@ class RunConfig:
 
     @property
     def label(self) -> str:
-        return "paritok-on" if self.paritok else "paritok-off"
+        return {"truncate": "truncate", "paginate": "paginate", "paritok": "paritok"}[self.strategy]
+
+    @property
+    def paginate(self) -> bool:
+        return self.strategy in ("paginate", "paritok")
+
+    @property
+    def effective_tool_budget(self) -> int:
+        """Truncating agents run a much smaller budget — that is the point of
+        the strategy. Paginating arms carry the full result across pages."""
+        return TRUNCATE_BUDGET if self.strategy == "truncate" else self.max_tool_output
 
     @property
     def api_key(self) -> str:

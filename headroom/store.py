@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS runs (
     pair_id           TEXT NOT NULL,          -- groups the two arms of one A/B
     task              TEXT NOT NULL,
     paritok           INTEGER NOT NULL,       -- 1 = compression on
+    strategy          TEXT DEFAULT 'paginate',-- truncate | paginate | paritok
+    truncations       INTEGER DEFAULT 0,      -- tool results that lost content
     model             TEXT NOT NULL,
     started_at        REAL NOT NULL,
     finished_at       REAL,
@@ -68,12 +70,26 @@ class Store:
         self.conn = sqlite3.connect(self.path, timeout=30)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        self._migrate()
         self.conn.commit()
 
-    def start_run(self, pair_id: str, task: str, paritok: bool, model: str) -> int:
+    def _migrate(self) -> None:
+        """CREATE TABLE IF NOT EXISTS won't add columns to an existing table, so
+        databases from an earlier run need the new ones backfilled."""
+        have = {r["name"] for r in self.conn.execute("PRAGMA table_info(runs)")}
+        for col, ddl in (
+            ("strategy", "TEXT DEFAULT 'paginate'"),
+            ("truncations", "INTEGER DEFAULT 0"),
+        ):
+            if col not in have:
+                self.conn.execute(f"ALTER TABLE runs ADD COLUMN {col} {ddl}")
+
+    def start_run(self, pair_id: str, task: str, paritok: bool, model: str,
+                  strategy: str = "paginate") -> int:
         cur = self.conn.execute(
-            "INSERT INTO runs (pair_id, task, paritok, model, started_at) VALUES (?,?,?,?,?)",
-            (pair_id, task, int(paritok), model, time.time()),
+            "INSERT INTO runs (pair_id, task, paritok, model, started_at, strategy) "
+            "VALUES (?,?,?,?,?,?)",
+            (pair_id, task, int(paritok), model, time.time(), strategy),
         )
         self.conn.commit()
         return cur.lastrowid
@@ -109,11 +125,11 @@ class Store:
 
     # -- reads used by the dashboard and the exporter ---------------------
     def pairs(self) -> list[dict]:
-        """Only complete pairs. A single-arm `headroom agent` run has nothing to
-        compare against and renders as a half-empty screen."""
+        """Only comparisons with at least two arms. A single `headroom agent`
+        run has nothing to compare against and renders as an empty screen."""
         rows = self.conn.execute(
             "SELECT pair_id, task, MIN(started_at) AS started, COUNT(*) AS n "
-            "FROM runs GROUP BY pair_id HAVING n = 2 ORDER BY started DESC"
+            "FROM runs GROUP BY pair_id HAVING n >= 2 ORDER BY started DESC"
         ).fetchall()
         return [{k: r[k] for k in ("pair_id", "task", "started")} for r in rows]
 

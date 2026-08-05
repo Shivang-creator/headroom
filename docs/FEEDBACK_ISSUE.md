@@ -7,10 +7,12 @@ File at https://github.com/Paritok-official/paritok-4b-v1/issues/new
 ---
 
 Built [Headroom](https://github.com/Shivang-creator/headroom) for the hackathon —
-a coding agent plus an A/B harness that runs each task twice, with and without
-the proxy. Paritok worked well: **47.8–81.6% fewer input tokens with identical
-outcomes** across three tasks. These are the four things that cost me real
-debugging time, in rough order of impact.
+a coding agent plus a harness that runs each task under three strategies for
+oversized tool output — truncate, paginate, and paginate-through-the-proxy.
+Paritok worked well: **45–81% compression at the proxy, and 12–52% fewer input
+tokens end to end** versus an identical uncompressed arm, with the same fix and
+green tests on every task. These are the four things that cost me real debugging
+time, in rough order of impact.
 
 ## 1. `/api/compress` returns the input verbatim above ~6,000 tokens, silently
 
@@ -114,11 +116,12 @@ prompt actually observed, or derive it from the upstream model where possible.
 ## What worked well
 
 Worth saying: on accumulated multi-turn agent context the compression quality was
-genuinely impressive. 81.6% reduction on a 16-turn debugging session with the
-agent reaching the identical fix, same patches, tests green. Cold start ~6.7s,
-warm 1.5–2.4s, and total wall time went from 65.7s to 80.7s to cut input tokens
-by 81.6% — a good trade. The `--openai-url` passthrough made pointing at a
-non-obvious provider a one-liner.
+genuinely impressive. On a 17-turn three-bug debugging session the proxy
+compressed 95,969 → 18,612 tokens (80.6%), and the agent reached the identical
+fix with the same three patches and green tests. End to end that arm used 43,808
+input tokens against 91,167 for the uncompressed control — 51.9% less for the
+same evidence. Cold start ~6.7s, warm 1.5–2.4s. The `--openai-url` passthrough
+made pointing at a non-obvious provider a one-liner.
 
 Environment: paritok 1.2.8, hosted GPU (RunPod serverless), macOS 15.5 arm64,
 Python 3.13, upstream `zai-org/GLM-5.1` via Featherless.

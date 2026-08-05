@@ -8,6 +8,7 @@ compressed 98%. See docs/FINDINGS.md.
 """
 from __future__ import annotations
 
+import inspect
 import os
 import subprocess
 import sys
@@ -135,10 +136,11 @@ class Toolbox:
     """Executes tool calls against one task repo, sandboxed to that directory."""
 
     def __init__(self, workdir: Path, max_tool_output: int = DEFAULT_MAX_TOOL_OUTPUT,
-                 page_chars: int = PAGE_CHARS):
+                 page_chars: int = PAGE_CHARS, paginate: bool = True):
         self.workdir = Path(workdir).resolve()
         self.max_tool_output = max_tool_output
         self.page_chars = page_chars
+        self.paginate = paginate
         self.patches_applied = 0
         self.truncations = 0
         self._pages: list[str] = []
@@ -154,6 +156,11 @@ class Toolbox:
         result is uncompressible and fatal; twenty 3,000-token pages compress to
         almost nothing.
         """
+        if not self.paginate:
+            # Truncating arm: keep the head, say what was lost. The agent is not
+            # deceived about the loss — it simply cannot get the rest back.
+            self._pages, self._page_source = [], ""
+            return text
         if len(text) <= self.page_chars:
             self._pages, self._page_source = [], ""
             return text
@@ -176,6 +183,13 @@ class Toolbox:
             fn = getattr(self, f"_t_{name}", None)
             if fn is None:
                 return f"ERROR: unknown tool {name!r}"
+            # Models routinely pass arguments that aren't in the schema — a
+            # `page` hint to next_page, a stray `recursive` to list_dir. Dropping
+            # them beats surfacing a TypeError the model then has to recover
+            # from, which costs a turn and pollutes the context we're measuring.
+            params = inspect.signature(fn).parameters
+            if not any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
+                args = {k: v for k, v in args.items() if k in params}
             out = str(fn(**args))
             if len(out) > self.max_tool_output:
                 self.truncations += 1
