@@ -1,8 +1,7 @@
-# Draft GitHub issue for Paritok
+# Feedback filed upstream
 
-File at https://github.com/Paritok-official/paritok-4b-v1/issues/new
-**Title:** `Hosted /api/compress silently returns input verbatim above ~6k tokens (reproducible script)`
-**Label:** `hackathon-feedback`
+**Filed as [issue #31](https://github.com/Paritok-official/paritok-4b-v1/issues/31)** on
+`Paritok-official/paritok-4b-v1`, 5 Aug 2026. Reproduced below for the record.
 
 ---
 
