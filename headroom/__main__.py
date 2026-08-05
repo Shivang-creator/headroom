@@ -89,8 +89,13 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.cmd == "tasks":
         for d in sorted(TASKS_DIR.iterdir()):
-            if d.is_dir() and (d / "TASK.md").exists():
-                print(f"{d.name}\n    {(d / 'TASK.md').read_text().strip().splitlines()[-1][:100]}")
+            if not (d.is_dir() and (d / "TASK.md").exists()):
+                continue
+            # First prose line, not the last — the last line of a multi-paragraph
+            # brief is a trailing caveat and reads as a non-sequitur here.
+            lines = [ln.strip() for ln in (d / "TASK.md").read_text().splitlines()]
+            summary = next((ln for ln in lines if ln and not ln.startswith("#")), "")
+            print(f"{d.name}\n    {summary[:110]}")
         return
 
     if args.cmd == "serve":
