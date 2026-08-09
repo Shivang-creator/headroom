@@ -3,6 +3,34 @@
 **Filed as [issue #31](https://github.com/Paritok-official/paritok-4b-v1/issues/31)** on
 `Paritok-official/paritok-4b-v1`, 5 Aug 2026. Reproduced below for the record.
 
+> ## ⚠️ Finding 1 was wrong and has been retracted
+>
+> §1 below reports a ~6,000-token block-size limit. **That conclusion was incorrect.**
+> [@shlok-temp corrected it][c] on the issue: the passthrough was the hosted GPU
+> intermittently not compressing ([#30][i30]), not a size guard.
+>
+> Re-tested 9 Aug. The identical probe now compresses everything up to 40,055
+> tokens, and an interleaved control — 3,000- and 8,000-token blocks alternating,
+> so both sizes sit in the same time windows — compressed **16/16, with 0/8 pairs
+> disagreeing**. Under a size effect every pair must disagree.
+>
+> The error: we swept sizes in ascending order, twice, against a time-varying
+> fault. That manufactures a perfect size correlation, and two runs agreeing felt
+> like replication when it was the same confound twice.
+>
+> **The observation survives, the attribution doesn't.** While not compressing,
+> `/api/compress` returns HTTP 200, `gpu_available: true`, and a plausible body,
+> and the client reports `below_refusal_threshold` — which reads as a decision
+> about content. That ambiguity is the real bug, and our own misdiagnosis is the
+> evidence for it. See [FINDINGS §4 and §4b](FINDINGS.md).
+>
+> §2, §3 and §4 below are unaffected and were re-verified.
+>
+> The original text is kept intact rather than edited away.
+>
+> [c]: https://github.com/Paritok-official/paritok-4b-v1/issues/31#issuecomment-5230270965
+> [i30]: https://github.com/Paritok-official/paritok-4b-v1/issues/30
+
 ---
 
 Built [Headroom](https://github.com/Shivang-creator/headroom) for the hackathon —

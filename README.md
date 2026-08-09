@@ -170,15 +170,22 @@ python -m headroom doctor
 
 ```
 Configuration
+  ✓ use_gpu_server — true (hosted GPU)
   ✓ history.context_window — 32,768 (matches the upstream ceiling)
-  ! compression.max_tokens — 50,000 — the hosted compressor returns input
-    verbatim above ~6,000 tokens, so blocks between 6,000 and this value are
-    silently skipped. Headroom paginates to stay under it.
 Paritok
-  ✓ compression smoke test — 12,650 → 721 chars (ratio 0.057)
+  ✓ Paritok hosted GPU — GPU server online (RunPod serverless).
+  ✓ compression smoke test — 12,650 → 2,207 chars (ratio 0.174)
+  ✓ Paritok proxy — up — 0 requests so far
 Upstream
   ✓ upstream zai-org/GLM-5.1 — reachable, emits native tool calls
 ```
+
+The smoke test is the one that matters. It round-trips a block through the
+compressor and fails the check if the result comes back the same size — which is
+exactly the state we spent a day misdiagnosing as a block-size limit
+([FINDINGS §4](docs/FINDINGS.md)). A backend that has stopped compressing still
+returns HTTP 200 and `gpu_available: true`, so this is the only signal that
+catches it.
 
 Paritok's [issue #29](https://github.com/Paritok-official/paritok-4b-v1/issues/29)
 asks for exactly this. Ours is a starting point they're welcome to take.
