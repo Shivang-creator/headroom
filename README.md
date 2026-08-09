@@ -62,18 +62,34 @@ compressed arm's payload peaked at **26,222 tokens sent against 6,502 billed** �
 it worked through more pages than the uncompressed arm managed, while sitting at
 a fifth of the ceiling. That is the mechanism working exactly as advertised.
 
-**5. The one case that genuinely overflows is the case Paritok can't help with.**
-A single tool result larger than the window — ~82,000 tokens from one `pytest`
-call — kills the run. But the hosted compressor **silently returns input verbatim
-above ~6,000 tokens**, so it declines exactly the blocks that cause the problem.
-Measured, reproducible, and detailed in [§4 of FINDINGS](docs/FINDINGS.md).
-Headroom works around it by paginating into ~3,100-token pages that sit inside
-the band where compression works — which turns that task from a hard failure into
-a solved run.
+**5. ⚠️ RETRACTED — and the retraction is the more useful finding.**
+On 5 Aug we measured, twice, that the hosted compressor returned input verbatim
+above ~6,000 tokens, and concluded there was a size guard. **That was wrong.**
+Re-tested on 9 Aug after [@shlok-temp pushed back][c]: the identical probe now
+compresses everything up to 40,055 tokens, and an interleaved test (3,000- and
+8,000-token blocks alternating, so both sit in the same time windows) compressed
+**16/16**. What we hit was the hosted GPU being down, per [issue #30][30].
+
+The reason we got it wrong is precisely the bug we reported: `/api/compress`
+returned **HTTP 200, `gpu_available: true`, and a plausible body** while not
+compressing at all, and downstream that surfaced as `below_refusal_threshold` —
+which reads as a decision about *content*. Nothing said "the backend didn't do
+the work." Someone actively probing the endpoint with a script still landed on
+the wrong cause; ordinary users see `tokens_saved: 0` and assume their content
+wasn't compressible.
+
+Full write-up, including the wrong version and how we found it, in
+[§4 of FINDINGS](docs/FINDINGS.md). We've kept the retraction visible rather
+than editing it away — the measurements were real and reproducible, and the
+mistake was in attributing them to size rather than to time.
 
 So the honest summary: **Paritok is a substantial and reliable cost win on
-accumulated multi-turn context, and today a size ceiling stops it being a
-capability unlock.** The workaround is cheap and it's in this repo.
+accumulated multi-turn context.** The capability-unlock case remains unproven
+here, but for a different reason than we first reported: agents self-limit
+(finding 2), not because compression declines large blocks.
+
+[c]: https://github.com/Paritok-official/paritok-4b-v1/issues/31#issuecomment-5230270965
+[30]: https://github.com/Paritok-official/paritok-4b-v1/issues/30
 
 ## Measured results
 
@@ -192,14 +208,17 @@ the latest user turn. Ask something unrelated to the context and it correctly
 returns nothing for every block. But a genuine GPU failure also returns nothing,
 and both become a `[REF:id]` stub. There's no signal to tell them apart.
 
-**4. Blocks above ~6,000 tokens come back verbatim, silently.** Reproducible with
-[`tools/probe_block_size.py`](tools/probe_block_size.py) — identical across two
-runs. A 4,001-token block compresses to 74 tokens (0.019). A 6,006-token block
-returns unchanged, in 2.4 seconds. So does 40,055. Meanwhile
-`compression.max_tokens` defaults to **50,000**, an order of magnitude above
-where compression actually stops working, and the failure surfaces downstream as
-`below_refusal_threshold` — which reads like a judgement about content rather
-than a size cutoff. This is why we paginate.
+**4. A silent no-op is indistinguishable from "nothing to compress" — and it fooled us.**
+When the hosted GPU is not compressing, `/api/compress` still returns HTTP 200,
+`gpu_available: true`, and a body that looks fine; the client reports
+`below_refusal_threshold`, which reads as a judgement about content. We measured
+that state twice and misdiagnosed it as a block-size limit — see the retraction
+in [§4 of FINDINGS](docs/FINDINGS.md). Two scripts now separate the cases:
+[`probe_block_size.py`](tools/probe_block_size.py) sweeps sizes,
+[`probe_size_vs_outage.py`](tools/probe_size_vs_outage.py) interleaves sizes to
+tell a size effect from a time effect. If you take one thing from this repo, take
+the second script — it is 90 seconds and it would have saved us a wrong
+conclusion.
 
 ## Setup
 

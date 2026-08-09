@@ -70,10 +70,11 @@ where it's satisfied. Anything still open is marked ⬜ and needs a human.
 - **Three-arm methodology** — truncate / paginate / compress. Most submissions
   will compare on/off, which overstates the result by ignoring that the real
   alternative is truncation.
-- **Boundary mapping** — we found and reproduced the ~6,000-token passthrough
-  cliff, which as far as we can tell is not documented anywhere.
-- **A working mitigation** — pagination into compressor-sized blocks, derived
-  directly from that measurement.
+- **Boundary mapping, then a public retraction.** We reported a ~6,000-token
+  passthrough cliff, were corrected by another participant, re-tested with an
+  interleaved control, found we were wrong, and said so on the issue and in the
+  README. The surviving finding — a silent no-op that reports `gpu_available:
+  true` — is the more useful one.
 - The project is an *instrument*, not a wrapper: it would produce a useful result
   even if the answer had been "compression doesn't help."
 
@@ -115,7 +116,14 @@ measurement is real, the methodology is more careful than an on/off comparison,
 and the size-ceiling finding is genuinely new information for the maintainers.
 
 **Weakest:** we cannot claim compression is a *capability unlock* on this
-evidence — the case that would prove it is the case the compressor currently
-declines. We say so plainly rather than engineering a task to hide it. A judge
-who runs the repo will find the README's claims match the output, which is worth
-more than a louder claim that falls apart in five minutes.
+evidence. And one headline finding was wrong: we attributed a passthrough to
+block size when it was a backend outage, because we swept sizes monotonically
+against a time-varying fault and never ran the interleaved control. Another
+participant caught it, we re-tested, and we retracted it publicly rather than
+editing it away.
+
+That is a real error and we are not dressing it up. What we would point to is
+what happened next: the correction is on the issue, in the README, and in
+FINDINGS §4 with the original text preserved, plus a script that separates the
+two hypotheses in 90 seconds. A judge who runs this repo will find the claims
+match the output.

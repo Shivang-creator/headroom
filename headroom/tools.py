@@ -27,11 +27,14 @@ from pathlib import Path
 # real strategy, not a straw man, which is why `headroom ab --truncate` exists.
 DEFAULT_MAX_TOOL_OUTPUT = 120_000
 
-# Characters per page of a large tool result. ~9,000 chars ≈ 3,100 tokens, which
-# sits inside the band where the hosted compressor measurably works. Above about
-# 6,000 tokens it returns the input verbatim, so an unpaged 82,000-token pytest
-# dump is not compressible at any setting. Reproduce with
-# `python tools/probe_block_size.py`.
+# Characters per page of a large tool result. ~9,000 chars ≈ 3,100 tokens.
+#
+# We originally sized this to dodge a block-size limit we thought we'd measured;
+# that turned out to be a transient backend outage and is retracted (see
+# docs/FINDINGS.md §4). Pagination stays because it is the right shape anyway:
+# it bounds how much any single tool result can cost, keeps blocks in the range
+# where compression measured best, and lets the agent decide how much of a large
+# result it actually needs.
 PAGE_CHARS = 9_000
 
 
@@ -150,11 +153,10 @@ class Toolbox:
     def _paginate(self, source: str, text: str) -> str:
         """Return page 1 and stash the rest.
 
-        Each page is sized to land inside the band where Paritok's compressor
-        actually works (measured: useful below ~4,000 tokens, silent passthrough
-        above ~6,000 — see tools/probe_block_size.py). One 82,000-token tool
-        result is uncompressible and fatal; twenty 3,000-token pages compress to
-        almost nothing.
+        Pages are sized to the range where compression measured best. One
+        82,000-token tool result also blows the upstream context window on its
+        own; twenty 3,000-token pages do not, and the agent can stop reading
+        once it has seen enough.
         """
         if not self.paginate:
             # Truncating arm: keep the head, say what was lost. The agent is not

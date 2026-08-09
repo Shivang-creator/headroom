@@ -117,10 +117,48 @@ small change that turns an unexplainable behaviour into an observable one.
 
 ---
 
-## 4. The hosted compressor silently passes through blocks above ~6,000 tokens
+## 4. ⚠️ RETRACTED: "the compressor passes through blocks above ~6,000 tokens"
 
-**This is the most consequential bug we found, and it is fully reproducible:
-[`tools/probe_block_size.py`](../tools/probe_block_size.py).**
+> **This section originally reported a hard block-size limit. That conclusion was
+> wrong.** It is preserved below, followed by the correction, because how we got it
+> wrong is more useful than the claim itself.
+>
+> **What actually happened:** on 5 Aug the hosted GPU was intermittently not
+> compressing (see [issue #30][i30]). We swept block sizes in *ascending order*,
+> twice, and both times the outage window happened to cover the tail of the sweep.
+> Ascending order plus a time-varying fault produces a perfect size correlation.
+> We reported it as a size guard.
+>
+> [@shlok-temp pushed back][c] on the issue: *"This might not be an issue with the
+> number of tokens. For some moments the GPU compression is down and the same
+> response is sent back."* Re-tested 9 Aug:
+>
+> **(a)** The identical probe now compresses everything — 6,006 → 149, 16,022 → 376,
+> 40,055 → 990. The cliff is gone.
+>
+> **(b)** [`probe_size_vs_outage.py`](../tools/probe_size_vs_outage.py) alternates
+> 3,000- and 8,000-token blocks so both sizes sit in the same time windows. Under a
+> size effect every adjacent pair must disagree. Result: **16/16 compressed, 0/8
+> pairs disagreed.**
+>
+> **The methodological lesson:** we varied one parameter monotonically against a
+> backend that varies over time, and never separated the two. Interleaving is the
+> control, it takes 90 seconds, and we should have run it before writing anything
+> down. Two consecutive runs agreeing felt like replication; it wasn't — it was the
+> same confound twice.
+>
+> **What survives:** the *observation* (HTTP 200 + `gpu_available: true` + verbatim
+> body + `below_refusal_threshold` downstream) was real and is a genuine reporting
+> bug — see §4b. What we retract is the attribution to block size, and the claim
+> that `compression.max_tokens: 50000` is set too high.
+>
+> [c]: https://github.com/Paritok-official/paritok-4b-v1/issues/31#issuecomment-5230270965
+> [i30]: https://github.com/Paritok-official/paritok-4b-v1/issues/30
+
+<details>
+<summary><b>The original (incorrect) section, preserved</b></summary>
+
+**Reproducible: [`tools/probe_block_size.py`](../tools/probe_block_size.py).**
 
 We built a task whose failing test suite emits ~82,000 tokens from a single
 `pytest` call — the best possible case for a compressor, since the output is 306
@@ -181,6 +219,42 @@ instead of echoing the input, so callers can chunk and retry.
 block is uncompressible; twenty-seven 3,100-token pages sit inside the working
 band. This is a reasonable thing for an agent to do anyway, and it converts the
 worst case into the best one.
+
+</details>
+
+## 4b. What actually survives: a silent no-op you cannot detect
+
+Strip the wrong diagnosis and a real bug remains, and it is arguably worse than
+the one we thought we'd found.
+
+While the hosted GPU was not compressing, `/api/compress` returned:
+
+- **HTTP 200**
+- **`gpu_available: true`** — the flag that exists to tell you otherwise
+- a body of the right shape, just uncompressed
+
+and the client surfaced it as `{"skipped": true, "reason": "below_refusal_threshold"}`
+— which reads as a decision about *content*, not about the backend.
+
+The evidence that this is hard to catch is us. We were actively probing the
+endpoint with a purpose-built script, we distrusted the result enough to run it
+twice, and we still reached the wrong conclusion. A normal user sees
+`tokens_saved: 0` and assumes their content wasn't compressible.
+
+**Suggested fixes, in priority order:**
+
+1. Return a `reason` that distinguishes `no_relevant_content` /
+   `backend_unavailable` / `below_threshold`. One field removes the entire class
+   of confusion.
+2. Make `/api/compress` set `gpu_available: false` when it isn't compressing. It
+   reported `true` throughout our outage — which is exactly [issue #30][i30]'s point.
+3. Add `requests_compressed` alongside `total_requests` in `/stats`, so a silent
+   no-op is visible without instrumenting anything.
+
+Pagination stays in Headroom regardless. It is no longer needed to dodge a size
+limit that doesn't exist, but it's still the right shape for an agent: it bounds
+the blast radius of any single tool result, and it keeps blocks in the range
+where compression measured best.
 
 ---
 

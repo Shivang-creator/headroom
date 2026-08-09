@@ -1,0 +1,178 @@
+[
+  {
+    "label": "SMALL",
+    "in_tokens": 3016,
+    "out_tokens": 106,
+    "ratio": 0.0353,
+    "compressed": true,
+    "empty": false,
+    "gpu_available": true,
+    "elapsed": 28.3,
+    "t": 28.3
+  },
+  {
+    "label": "LARGE",
+    "in_tokens": 8009,
+    "out_tokens": 281,
+    "ratio": 0.0351,
+    "compressed": true,
+    "empty": false,
+    "gpu_available": true,
+    "elapsed": 4.6,
+    "t": 32.9
+  },
+  {
+    "label": "SMALL",
+    "in_tokens": 3016,
+    "out_tokens": 106,
+    "ratio": 0.0353,
+    "compressed": true,
+    "empty": false,
+    "gpu_available": true,
+    "elapsed": 3.1,
+    "t": 36.0
+  },
+  {
+    "label": "LARGE",
+    "in_tokens": 8009,
+    "out_tokens": 281,
+    "ratio": 0.0351,
+    "compressed": true,
+    "empty": false,
+    "gpu_available": true,
+    "elapsed": 3.4,
+    "t": 39.4
+  },
+  {
+    "label": "SMALL",
+    "in_tokens": 3016,
+    "out_tokens": 106,
+    "ratio": 0.0353,
+    "compressed": true,
+    "empty": false,
+    "gpu_available": true,
+    "elapsed": 2.2,
+    "t": 41.6
+  },
+  {
+    "label": "LARGE",
+    "in_tokens": 8009,
+    "out_tokens": 274,
+    "ratio": 0.0342,
+    "compressed": true,
+    "empty": false,
+    "gpu_available": true,
+    "elapsed": 2.8,
+    "t": 44.3
+  },
+  {
+    "label": "SMALL",
+    "in_tokens": 3016,
+    "out_tokens": 106,
+    "ratio": 0.0353,
+    "compressed": true,
+    "empty": false,
+    "gpu_available": true,
+    "elapsed": 2.5,
+    "t": 46.8
+  },
+  {
+    "label": "LARGE",
+    "in_tokens": 8009,
+    "out_tokens": 281,
+    "ratio": 0.0351,
+    "compressed": true,
+    "empty": false,
+    "gpu_available": true,
+    "elapsed": 3.2,
+    "t": 50.0
+  },
+  {
+    "label": "SMALL",
+    "in_tokens": 3016,
+    "out_tokens": 106,
+    "ratio": 0.0353,
+    "compressed": true,
+    "empty": false,
+    "gpu_available": true,
+    "elapsed": 2.7,
+    "t": 52.7
+  },
+  {
+    "label": "LARGE",
+    "in_tokens": 8009,
+    "out_tokens": 330,
+    "ratio": 0.0412,
+    "compressed": true,
+    "empty": false,
+    "gpu_available": true,
+    "elapsed": 3.0,
+    "t": 55.7
+  },
+  {
+    "label": "SMALL",
+    "in_tokens": 3016,
+    "out_tokens": 106,
+    "ratio": 0.0353,
+    "compressed": true,
+    "empty": false,
+    "gpu_available": true,
+    "elapsed": 2.6,
+    "t": 58.3
+  },
+  {
+    "label": "LARGE",
+    "in_tokens": 8009,
+    "out_tokens": 274,
+    "ratio": 0.0342,
+    "compressed": true,
+    "empty": false,
+    "gpu_available": true,
+    "elapsed": 2.6,
+    "t": 60.9
+  },
+  {
+    "label": "SMALL",
+    "in_tokens": 3016,
+    "out_tokens": 106,
+    "ratio": 0.0353,
+    "compressed": true,
+    "empty": false,
+    "gpu_available": true,
+    "elapsed": 2.3,
+    "t": 63.2
+  },
+  {
+    "label": "LARGE",
+    "in_tokens": 8009,
+    "out_tokens": 281,
+    "ratio": 0.0351,
+    "compressed": true,
+    "empty": false,
+    "gpu_available": true,
+    "elapsed": 3.0,
+    "t": 66.1
+  },
+  {
+    "label": "SMALL",
+    "in_tokens": 3016,
+    "out_tokens": 106,
+    "ratio": 0.0353,
+    "compressed": true,
+    "empty": false,
+    "gpu_available": true,
+    "elapsed": 2.1,
+    "t": 68.2
+  },
+  {
+    "label": "LARGE",
+    "in_tokens": 8009,
+    "out_tokens": 281,
+    "ratio": 0.0351,
+    "compressed": true,
+    "empty": false,
+    "gpu_available": true,
+    "elapsed": 3.0,
+    "t": 71.2
+  }
+]

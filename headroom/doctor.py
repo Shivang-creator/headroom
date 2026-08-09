@@ -23,8 +23,7 @@ from .config import (
 )
 
 OK, WARN, FAIL = "✓", "!", "✗"
-COMPRESSOR_SAFE_BLOCK = 4_000   # measured: works
-COMPRESSOR_CLIFF = 6_000        # measured: passthrough at and above this
+COMPRESSOR_SAFE_BLOCK = 4_000   # measured: compresses reliably
 
 
 class Report:
@@ -89,12 +88,9 @@ def check_config(r: Report) -> None:
         else:
             r.add(OK, "history.context_window", f"{w:,} (matches the upstream ceiling)")
 
-    max_tokens = _yaml_value(text, "max_tokens")
-    if max_tokens and max_tokens.isdigit() and int(max_tokens) > COMPRESSOR_CLIFF:
-        r.add(WARN, "compression.max_tokens", (
-            f"{int(max_tokens):,} — the hosted compressor returns input verbatim above "
-            f"~{COMPRESSOR_CLIFF:,} tokens, so blocks between {COMPRESSOR_CLIFF:,} and this "
-            f"value are silently skipped. Headroom paginates to stay under it."))
+    # An earlier version warned that max_tokens above ~6,000 was unsafe. That was
+    # based on a block-size limit we measured but that turned out to be a transient
+    # backend outage — retracted, see docs/FINDINGS.md §4. No warning is warranted.
 
 
 def check_gpu(r: Report, keys: dict) -> None:
