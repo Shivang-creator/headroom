@@ -117,7 +117,59 @@ small change that turns an unexplainable behaviour into an observable one.
 
 ---
 
-## 4. ⚠️ RETRACTED: "the compressor passes through blocks above ~6,000 tokens"
+## 4. The size cliff: reported → retracted → confirmed after all
+
+> ### 📌 Final resolution (16 Aug 2026) — read this first
+>
+> **The original finding was substantially correct. The retraction below
+> over-corrected, and this note supersedes it.**
+>
+> Sequence:
+>
+> 1. **5 Aug** — we measured size-correlated passthrough: fine below ~4,000
+>    tokens, input returned verbatim at 6,006 and above, in 1–2s. Reported as a
+>    block-size limit.
+> 2. **8 Aug** — [@shlok-temp suggested][c1] it was the hosted GPU intermittently
+>    dropping out ([#30][i30]) rather than a size effect.
+> 3. **9 Aug** — we re-tested. The cliff was gone: the same probe compressed
+>    everything to 40,055 tokens, and an interleaved control (3,000- and
+>    8,000-token blocks alternating) compressed 16/16. We concluded we'd been
+>    fooled by an ascending sweep against a time-varying fault, and [retracted][c2].
+> 4. **16 Aug** — the maintainer [resolved it][c3]: *"This was a chunking gap in
+>    the worker you tested against (1.2.8 era). The current hosted worker splits
+>    oversized input into ≤3k-token structural chunks, compresses them
+>    concurrently, and merges."*
+>
+> A chunking gap **is** a size-dependent failure. So the 5 Aug observation was
+> real, the mechanism was real, and it was fixed between our test and our re-test.
+>
+> **Our re-test could not have distinguished the two hypotheses**, and we didn't
+> notice. Running the interleaved control four days later, against a live hosted
+> service, meant "the effect is gone" was equally consistent with *we misattributed
+> it* and *they fixed it*. We read a null result as refutation when it was
+> ambiguous.
+>
+> The maintainer's detail that clinches it: their fixed worker takes **~8s of real
+> inference** on a 6,720-token block. Our failing case returned **verbatim in
+> 1–2s** — far too fast for inference, which is exactly the early-return signature
+> we originally inferred. That reasoning was sound; we abandoned it too readily.
+>
+> **The lesson, which is sharper than the one we drew first:** when you re-test
+> against a system someone else operates and can change, a disappeared effect is
+> not evidence you were wrong. Pin the version, or ask the operator what changed.
+> We had no way to pin `1.2.8-era hosted worker`, and we never asked.
+>
+> Everything below — the original report, then the 9 Aug retraction — is preserved
+> in order, because the sequence is the point.
+>
+> [c1]: https://github.com/Paritok-official/paritok-4b-v1/issues/31#issuecomment-5226253461
+> [c2]: https://github.com/Paritok-official/paritok-4b-v1/issues/31#issuecomment-5230270965
+> [c3]: https://github.com/Paritok-official/paritok-4b-v1/issues/31
+> [i30]: https://github.com/Paritok-official/paritok-4b-v1/issues/30
+
+---
+
+## 4a. ⚠️ The 9 Aug retraction (superseded by the note above)
 
 > **This section originally reported a hard block-size limit. That conclusion was
 > wrong.** It is preserved below, followed by the correction, because how we got it

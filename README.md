@@ -62,7 +62,29 @@ compressed arm's payload peaked at **26,222 tokens sent against 6,502 billed** �
 it worked through more pages than the uncompressed arm managed, while sitting at
 a fifth of the ceiling. That is the mechanism working exactly as advertised.
 
-**5. ⚠️ RETRACTED — and the retraction is the more useful finding.**
+**5. Reported a bug, retracted it, then found the retraction was wrong.**
+Short version: on 5 Aug we measured size-correlated passthrough above ~6,000
+tokens. Another participant suggested it was a backend outage; we re-tested on
+9 Aug, couldn't reproduce, and retracted. On 16 Aug the maintainer
+[resolved it][r1]: it *was* real — a chunking gap in the 1.2.8-era worker, fixed
+between our test and our re-test. **The original finding stands; the retraction
+over-corrected.**
+
+The lesson is sharper than the one we drew first: re-testing against a live
+service someone else operates cannot distinguish *"I was wrong"* from *"they
+fixed it."* We read a null result as refutation when it was ambiguous. Full
+sequence in [FINDINGS §4](docs/FINDINGS.md).
+
+Three fixes shipped upstream off the back of this report — a `dropped: true` flag
+so an empty compression is distinguishable from a backend failure, `400` instead
+of `500` on malformed bodies, and `history.context_window` surfaced at startup.
+
+[r1]: https://github.com/Paritok-official/paritok-4b-v1/issues/31
+
+<details>
+<summary>The superseded 9 Aug retraction, kept for the record</summary>
+
+**⚠️ RETRACTED — and the retraction is the more useful finding.**
 On 5 Aug we measured, twice, that the hosted compressor returned input verbatim
 above ~6,000 tokens, and concluded there was a size guard. **That was wrong.**
 Re-tested on 9 Aug after [@shlok-temp pushed back][c]: the identical probe now
@@ -82,6 +104,8 @@ Full write-up, including the wrong version and how we found it, in
 [§4 of FINDINGS](docs/FINDINGS.md). We've kept the retraction visible rather
 than editing it away — the measurements were real and reproducible, and the
 mistake was in attributing them to size rather than to time.
+
+</details>
 
 So the honest summary: **Paritok is a substantial and reliable cost win on
 accumulated multi-turn context.** The capability-unlock case remains unproven
