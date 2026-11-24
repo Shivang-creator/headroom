@@ -135,6 +135,9 @@ SCHEMAS = [
 ]
 
 
+_SECRET_ENV_MARKERS = ("API_KEY", "TOKEN", "SECRET", "PASSWORD")
+
+
 class Toolbox:
     """Executes tool calls against one task repo, sandboxed to that directory."""
 
@@ -231,7 +234,7 @@ class Toolbox:
     def _t_grep(self, pattern: str, path: str = ".") -> str:
         root = self._resolve(path)
         proc = subprocess.run(
-            ["grep", "-rnE", "--binary-files=without-match", pattern, str(root)],
+            ["grep", "-rnE", "--binary-files=without-match", "-e", pattern, "--", str(root)],
             capture_output=True, text=True, timeout=30,
         )
         if proc.returncode not in (0, 1):
@@ -243,7 +246,11 @@ class Toolbox:
         # Put the interpreter running Headroom at the front of PATH so a bare
         # `python -m pytest` resolves inside the task repo. macOS has no bare
         # `python`, and the agent should not have to know that.
-        env = dict(os.environ)
+        # The command is chosen by the model, so it gets no credentials: a
+        # `env` or `printenv` would otherwise copy the provider keys into the
+        # transcript, the store and the exported examples.
+        env = {k: v for k, v in os.environ.items()
+               if not any(m in k.upper() for m in _SECRET_ENV_MARKERS)}
         env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")
         proc = subprocess.run(
             cmd, shell=True, cwd=self.workdir, capture_output=True, text=True, timeout=180, env=env,

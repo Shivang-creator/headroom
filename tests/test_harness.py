@@ -309,3 +309,16 @@ class TestStore:
         s.start_run("p", "t", True, "m")
         s.start_run("p", "t", False, "m")
         assert [r["paritok"] for r in s.runs_for_pair("p")] == [0, 1]
+
+
+class TestToolHardening:
+    def test_grep_pattern_is_never_an_option(self, tb):
+        # A leading dash used to be parsed as a grep flag (`-f<file>` reads
+        # patterns from anywhere on disk).
+        out = tb.call("grep", {"pattern": "-f/nonexistent"})
+        assert "grep failed" not in out
+
+    def test_run_bash_does_not_inherit_api_keys(self, tb, monkeypatch):
+        monkeypatch.setenv("FEATHERLESS_API_KEY", "sk-should-not-leak")
+        out = tb.call("run_bash", {"cmd": "env"})
+        assert "sk-should-not-leak" not in out
